@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(clasp *)",
+      "Bash(curl *)",
+      "Bash(node *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(echo *)",
+      "Bash(mkdir *)",
+      "Bash(chmod *)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(git push *)",
+      "Bash(clasp login*)",
+      "Read(.env*)",
+      "Write(apps-script/src/correlation/*)",
+      "Write(apps-script/src/logging/*)"
+    ]
+  }
+}

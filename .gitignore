@@ -1,0 +1,16 @@
+# Clasp credentials (contains Script ID — per-developer)
+apps-script/.clasp.json
+
+# Node
+node_modules/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local preferences
+CLAUDE.local.md
