@@ -101,7 +101,7 @@ curl -s "$GAS_DEV_URL?action=ping" | jq .
 
 # Test 2: Health
 curl -s "$GAS_DEV_URL?action=health" | jq .
-# EXPECT: { "status": "healthy", "spreadsheet": { "id": "...", "name": "ChangeTracker-Sandbox", "sheets": ... } }
+# EXPECT: { "status": "healthy", "spreadsheet": { "id": "...", "name": "CashProto", "sheets": ... } }
 
 # Test 3: Write a log
 curl -s -X POST "$GAS_DEV_URL" \

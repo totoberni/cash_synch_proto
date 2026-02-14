@@ -17,15 +17,58 @@
       "Bash(grep *)",
       "Bash(echo *)",
       "Bash(mkdir *)",
-      "Bash(chmod *)"
+      "Bash(chmod *)",
+      "Bash(date *)",
+      "Bash(jq *)"
     ],
     "deny": [
-      "Bash(rm -rf /)",
+      "Bash(rm -rf *)",
       "Bash(git push *)",
+      "Bash(git checkout main)",
+      "Bash(git checkout master)",
       "Bash(clasp login*)",
       "Read(.env*)",
+      "Write(.env*)",
       "Write(apps-script/src/correlation/*)",
-      "Write(apps-script/src/logging/*)"
+      "Write(apps-script/src/logging/*)",
+      "Edit(apps-script/src/correlation/*)",
+      "Edit(apps-script/src/logging/*)",
+      "MultiEdit(apps-script/src/correlation/*)",
+      "MultiEdit(apps-script/src/logging/*)",
+      "Write(**/*settings.json)",
+      "Write(**/*settings.local.json)",
+      "Write(.claude/settings.json)",
+      "Write(.claude/settings.local.json)",
+      "Edit(**/*settings.json)",
+      "Edit(**/*settings.local.json)",
+      "Edit(.claude/settings.json)",
+      "Edit(.claude/settings.local.json)",
+      "MultiEdit(**/*settings.json)",
+      "MultiEdit(**/*settings.local.json)",
+      "MultiEdit(.claude/settings.json)",
+      "MultiEdit(.claude/settings.local.json)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/update-changelog.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-gotchas-on-error.sh"
+          }
+        ]
+      }
     ]
   }
 }

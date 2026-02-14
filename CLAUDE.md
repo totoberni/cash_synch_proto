@@ -53,3 +53,6 @@ This is a sandbox prototype — the code will later migrate into the enterprise 
 ## Module Changelogs
 @apps-script/src/api/changelog.md
 @apps-script/src/tracking/changelog.md
+
+## Mistakes and gotchas
+@gotchas.md
