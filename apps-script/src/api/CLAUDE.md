@@ -1,18 +1,22 @@
 # API Module — CLAUDE.md
 
-## Purpose
-HTTP entry points. doGet() and doPost() route requests by `action` parameter via switch statement.
+## Files
+- `WebApp.gs` — Main entry point. Routes doGet (getLogs, health, ping) and doPost (writeLog, reportChange).
 
-## Pattern
-Every action: validate → log start → handle → log completion → return JSON response.
-All responses use ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(JSON).
+## Conventions
+- Use `var` for all declarations (enterprise convention)
+- doPost routes via a switch on `body.action`
+- Each action has a dedicated `handleXxx()` function
+- Always generate a correlationId via `CorrelationId.generate()` at the top of doGet/doPost
+- Return JSON via `ContentService.createTextOutput(JSON.stringify(...)).setMimeType(ContentService.MimeType.JSON)`
 
-## Existing Actions (from enterprise)
-- GET: getLogs, health, ping
-- POST: writeLog
+## What NOT to include
+- No sync handlers (handleSyncRequest, handleReferralSync, etc.) — those are enterprise-only
+- No direct sheet manipulation — delegate to LogService or ChangeTracker
 
-## Actions Added by This Project
-- POST: reportChange — validates payload, calls ChangeTracker.notify(), returns result
+## Phase 2 modification
+The `reportChange` case in doPost calls `handleReportChange()` which delegates to `ChangeTracker.notify()`.
+See `plan.md` Task 2.2 for the exact code.
 
-## Recent Changes
+## Recent changes
 @changelog.md

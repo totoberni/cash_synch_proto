@@ -1,70 +1,60 @@
 #!/bin/bash
-# update-changelog.sh — PostToolUse hook for per-module changelog updates
-# Fires on: Edit | MultiEdit | Write
-# Appends a timestamped entry to the relevant module's changelog.md
-set -euo pipefail
+# .claude/hooks/update-changelog.sh
+# PostToolUse hook: auto-appends changelog entries when files are written/edited.
+# Adapted for GAS Change Tracker Sandbox module structure.
 
+# Read tool info from stdin
 INPUT=$(cat)
-
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // "unknown"')
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty')
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
 # Skip if no file path
 [ -z "$FILE_PATH" ] && exit 0
 
-# Prevent infinite recursion — skip meta files
+# Prevent infinite recursion — skip changelog files and orchestrator state
 BASENAME=$(basename "$FILE_PATH")
 case "$BASENAME" in
-  changelog.md|changelog-archive.md|CHANGELOG.md) exit 0 ;;
-  gotchas.md|CLAUDE.md|CLAUDE.local.md) exit 0 ;;
-  settings.json|settings.local.json) exit 0 ;;
-  plan.md|README.md|test-report.md) exit 0 ;;
-  *.example|.gitignore|.clasp.json) exit 0 ;;
+  changelog.md|changelog-archive.md|CHANGELOG.md|CLAUDE.md) exit 0 ;;
+  state.md|task-queue.md|active-tasks.md|decisions.md) exit 0 ;;
+  gotchas.md) exit 0 ;;
 esac
 
-# Resolve project dir
+# Only track files in our source modules
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 REL_PATH="${FILE_PATH#$PROJECT_DIR/}"
 
 # Determine which module this file belongs to
 case "$REL_PATH" in
   apps-script/src/api/*)         CHANGELOG="$PROJECT_DIR/apps-script/src/api/changelog.md" ;;
+  apps-script/src/correlation/*) CHANGELOG="$PROJECT_DIR/apps-script/src/correlation/changelog.md" ;;
+  apps-script/src/logging/*)     CHANGELOG="$PROJECT_DIR/apps-script/src/logging/changelog.md" ;;
   apps-script/src/tracking/*)    CHANGELOG="$PROJECT_DIR/apps-script/src/tracking/changelog.md" ;;
-  apps-script/src/correlation/*) exit 0 ;;  # READ-ONLY — enterprise copy, should never fire
-  apps-script/src/logging/*)     exit 0 ;;  # READ-ONLY — enterprise copy, should never fire
-  stub-server/*)                 CHANGELOG="$PROJECT_DIR/apps-script/src/tracking/changelog.md" ;;
-  scripts/*)                     CHANGELOG="$PROJECT_DIR/apps-script/src/tracking/changelog.md" ;;
-  *)                             exit 0 ;;  # Untracked file
+  stub-server/*)                 CHANGELOG="$PROJECT_DIR/stub-server/changelog.md" ;;
+  scripts/*)                     CHANGELOG="$PROJECT_DIR/scripts/changelog.md" ;;
+  *)                             exit 0 ;;  # Not a tracked module
 esac
 
 TIMESTAMP=$(date -u '+%H:%MZ')
 DATE=$(date -u '+%Y-%m-%d')
 
 # Build description from tool type
-DESC=""
 if [ "$TOOL_NAME" = "Write" ]; then
-  DESC="File created/written: \`$REL_PATH\`"
+  DESC="File written/created"
 elif [ "$TOOL_NAME" = "Edit" ]; then
-  OLD=$(echo "$INPUT" | jq -r '.tool_input.old_string // empty' 2>/dev/null | head -c 60 | tr '\n' ' ')
-  NEW=$(echo "$INPUT" | jq -r '.tool_input.new_string // empty' 2>/dev/null | head -c 60 | tr '\n' ' ')
-  if [ -n "$OLD" ] && [ -n "$NEW" ]; then
-    DESC="Edited \`$REL_PATH\`: '${OLD}' → '${NEW}'"
-  else
-    DESC="Edited \`$REL_PATH\`"
-  fi
+  OLD=$(echo "$INPUT" | jq -r '.tool_input.old_string // empty' | head -c 60 | tr '\n' ' ')
+  NEW=$(echo "$INPUT" | jq -r '.tool_input.new_string // empty' | head -c 60 | tr '\n' ' ')
+  DESC="Edited: '${OLD}' → '${NEW}'"
 elif [ "$TOOL_NAME" = "MultiEdit" ]; then
-  DESC="Multiple edits to \`$REL_PATH\`"
+  DESC="Multiple edits applied"
 fi
-
-[ -z "$DESC" ] && exit 0
 
 # Create changelog if it doesn't exist
 if [ ! -f "$CHANGELOG" ]; then
   MODULE_DIR=$(dirname "$CHANGELOG")
-  MODULE_NAME=$(basename "$MODULE_DIR")
+  MODULE=$(basename "$MODULE_DIR")
   cat > "$CHANGELOG" << EOF
-# Changelog — $MODULE_NAME
+# Changelog — $MODULE
 
 <!-- AUTO-MANAGED: Entries appended by PostToolUse hook -->
 
@@ -81,21 +71,17 @@ if ! grep -q "## $DATE" "$CHANGELOG"; then
 fi
 
 # Append entry
-echo "- **${TIMESTAMP}** | ${DESC} | session:\`${SESSION_ID:0:8}\`" >> "$CHANGELOG"
+echo "- **${TIMESTAMP}** | \`${REL_PATH}\` | ${DESC} | session:\`${SESSION_ID:0:8}\`" >> "$CHANGELOG"
 
 # Truncation: keep only last 25 entries
 ENTRY_COUNT=$(grep -c '^\- \*\*' "$CHANGELOG" 2>/dev/null || echo 0)
 if [ "$ENTRY_COUNT" -gt 25 ]; then
   ARCHIVE="${CHANGELOG%.md}-archive.md"
-  # Preserve header (first 3 lines)
-  head -n 3 "$CHANGELOG" > "$CHANGELOG.tmp"
-  echo "" >> "$CHANGELOG.tmp"
-  # Keep last 25 entry lines plus their date headers
+  HEADER_END=$(grep -n '^\- \*\*' "$CHANGELOG" | head -1 | cut -d: -f1)
+  HEADER_END=$((HEADER_END - 1))
+  head -n "$HEADER_END" "$CHANGELOG" > "$CHANGELOG.tmp"
   tail -n 30 "$CHANGELOG" >> "$CHANGELOG.tmp"
-  # Archive overflow
-  echo "" >> "$ARCHIVE" 2>/dev/null || true
-  echo "## Archived $(date -u '+%Y-%m-%d %H:%MZ')" >> "$ARCHIVE"
-  grep '^\- \*\*' "$CHANGELOG" | head -n -25 >> "$ARCHIVE"
+  head -n -30 "$CHANGELOG" | tail -n +"$((HEADER_END + 1))" >> "$ARCHIVE"
   mv "$CHANGELOG.tmp" "$CHANGELOG"
 fi
 

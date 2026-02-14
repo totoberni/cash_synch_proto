@@ -1,3 +1,3 @@
-# Changelog — apps-script/src/api/
+# Changelog — api
 
-<!-- AUTO-MANAGED: Entries appended by agents and hooks -->
+<!-- AUTO-MANAGED: Entries appended by PostToolUse hook -->
