@@ -17,7 +17,7 @@ $GAS_WEBAPP_URL = if ($env:GAS_WEBAPP_URL) { $env:GAS_WEBAPP_URL } else { "https
 $APPS_SCRIPT_DIR = "apps-script/src"
 
 Write-Host "┌────────────────────────────────────────────────────────────────┐" -ForegroundColor Blue
-Write-Host "│ GAS Change Tracker — Post-Push Notification                   │" -ForegroundColor Blue
+Write-Host "│ GAS Change Tracker — Post-Push Notification                    │" -ForegroundColor Blue
 Write-Host "└────────────────────────────────────────────────────────────────┘" -ForegroundColor Blue
 Write-Host ""
 
