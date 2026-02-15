@@ -48,7 +48,7 @@ else
     # Use jq to construct a proper JSON array
     if command -v jq &> /dev/null; then
         CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null | \
-                       grep "^${APPS_SCRIPT_DIR}/" | \
+                       { grep "^${APPS_SCRIPT_DIR}/" || true; } | \
                        sed "s|^${APPS_SCRIPT_DIR}/||" | \
                        jq -R -s -c 'split("\n") | map(select(length > 0))')
 
