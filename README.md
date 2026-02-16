@@ -1,226 +1,178 @@
 # GAS Change Tracker — Sandbox Prototype
 
-A Google Apps Script (GAS) web app that receives code change notifications via HTTP POST and forwards them to an external VPS. This is a sandbox prototype — the code will later migrate into the enterprise `apps-script/` directory.
+Sandbox prototype for an automated documentation pipeline. A GAS web app receives code change notifications, logs them to Google Sheets, and relays them to a VPS where AI agents generate documentation from code diffs.
+
+Built as a local sandbox because enterprise GDrive access is not yet available. All components are designed to transplant directly into the enterprise codebase.
+
+## Status
+
+| Plan | Description | State |
+|------|-------------|-------|
+| [plan.md](plan.md) | Base GAS web app + single-commit change tracking | Complete (v1.0.0) |
+| [plan2.md](plan2.md) | Batched documentation pipeline via GitHub Actions | In progress |
 
 ## Architecture
 
+### Current (plan 1) — Single-commit notifications
+
 ```
 Developer (post-push script)
-    │
-    │  POST /exec  { action: "reportChange", author, files, changelog, commitHash }
+    │  POST { action: "reportChange", author, files, changelog, commitHash }
     ▼
-┌─────────────────────────────────────────────┐
-│  GAS Web App (WebApp.gs — doPost)           │
-│                                             │
-│  1. Route to handleReportChange()           │
-│  2. Validate payload                        │
-│  3. Call ChangeTracker.notify()             │
-│     ├─ Write row to _CHANGE_LOG sheet       │
-│     ├─ Read VPS URL from Script Properties  │
-│     ├─ If URL set → POST to VPS             │
-│     └─ If URL empty → skip (stub-safe)      │
-│  4. Write INFO trace to _LOGS via LogService│
-│  5. Return result JSON to caller            │
-└─────────────────────────────────────────────┘
-    │
-    │  POST /changelog  (UrlFetchApp.fetch)
-    ▼
-VPS / Local Stub Server
-    │
-    │  { received: true, timestamp }
-    ▼
-Response flows back through GAS to caller
+GAS Web App → _CHANGE_LOG sheet → VPS stub
 ```
+
+### Target (plan 2) — Batched documentation pipeline
+
+```
+GitHub Actions (manual or 48h cron)
+    │
+    │  Determine undocumented range: last-documented..HEAD
+    │  POST { action: "reportBatch", range, commits, filesChanged, repository }
+    ▼
+GAS Web App → _CHANGE_LOG sheet → VPS
+    │                                  │
+    │  { ack: true, batchId }          │  Fetch diff via GitHub API
+    │  ← ── ── ── ── ── ── ── ── ── ──│  AI agents generate docs
+    ▼
+GitHub Action moves last-documented tag (only on ack)
+```
+
+Key difference: the VPS fetches full diffs from GitHub API using the commit range — no large payloads through GAS.
 
 ## Prerequisites
 
 - [clasp](https://github.com/nicholaschiang/clasp) (v3+) — Google Apps Script CLI
 - [Node.js](https://nodejs.org/) (v18+) — for the local stub server
 - [ngrok](https://ngrok.com/) — to tunnel localhost for GAS → VPS connectivity
-- [jq](https://jqlang.github.io/jq/) — used by the bash trigger script
-- A Google account with access to Apps Script and Google Sheets
+- [jq](https://jqlang.github.io/jq/) — used by trigger and payload builder scripts
+- A Google account with Apps Script and Google Sheets access
 
-## Setup
+## Quick Start
 
-1. **Clone and install clasp** (if not already):
-   ```bash
-   npm install -g @nicholaschiang/clasp
-   clasp login
-   ```
+```bash
+# 1. Configure
+cp .env.example .env          # Fill in your GAS deployment URL
 
-2. **Create a Google Sheet** named `CashProto` (or any name). Note the Sheet ID from the URL.
+# 2. Start dev environment (stub server + ngrok in one terminal)
+bash scripts/dev-start.sh
 
-3. **Create a GAS project** bound to the sheet:
-   - Open the sheet → Extensions → Apps Script
-   - Copy the Script ID from Project Settings
+# 3. Set the printed ngrok URL in GAS Script Properties:
+#    CHANGE_TRACKER_VPS_URL = https://xxxx.ngrok-free.app/changelog
+#    CHANGE_TRACKER_ENABLED = true
 
-4. **Configure `.clasp.json`**:
-   ```bash
-   cd apps-script
-   # .clasp.json should contain:
-   # { "scriptId": "YOUR_SCRIPT_ID", "rootDir": "./src" }
-   ```
-
-5. **Push and deploy**:
-   ```bash
-   cd apps-script
-   clasp push
-   clasp deploy -d "v1.0.0"
-   ```
-   Note the deployment exec URL from the output.
-
-6. **Set Script Properties** (Apps Script IDE → Project Settings → Script Properties):
-
-   | Property | Value | Required |
-   |----------|-------|----------|
-   | `CHANGE_TRACKER_ENABLED` | `true` or `false` | Yes |
-   | `CHANGE_TRACKER_VPS_URL` | ngrok HTTPS URL + `/changelog` | Only if VPS enabled |
-   | `GAS_DEPLOYMENT_URL` | Your GAS `/exec` URL | Optional (included in VPS payload) |
+# 4. Test
+curl -sL "$GAS_WEBAPP_URL?action=ping" | jq .
+```
 
 ## Configuration
 
-The app is configured entirely via GAS Script Properties (no hardcoded values):
+### .env (local, gitignored)
 
-| Property | Purpose | Default behavior when missing |
-|----------|---------|-------------------------------|
+```bash
+GAS_WEBAPP_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
+STUB_SERVER_PORT=3456
+```
+
+### GAS Script Properties (Apps Script IDE → Project Settings)
+
+| Property | Purpose | When missing |
+|----------|---------|--------------|
 | `CHANGE_TRACKER_ENABLED` | Master switch for VPS forwarding | VPS calls skipped |
-| `CHANGE_TRACKER_VPS_URL` | Endpoint to forward change data to | VPS calls skipped |
-| `GAS_DEPLOYMENT_URL` | Included in the VPS payload for context | `"not-configured"` |
+| `CHANGE_TRACKER_VPS_URL` | VPS endpoint (ngrok URL + `/changelog`) | VPS calls skipped |
+| `GAS_DEPLOYMENT_URL` | Included in VPS payload for context | `"not-configured"` |
 
-**Stub-safe mode**: If either `CHANGE_TRACKER_ENABLED` is `false` or `CHANGE_TRACKER_VPS_URL` is missing, the app skips VPS forwarding entirely. Changes are still logged to the `_CHANGE_LOG` sheet.
+### GitHub Secrets (for plan 2)
 
-## Usage
-
-### Post-push trigger script (recommended)
-
-```bash
-export GAS_WEBAPP_URL="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
-./scripts/post-push-notify.sh
-```
-
-The script automatically gathers git metadata (author, commit hash, message, changed files in `apps-script/src/`) and POSTs to the GAS web app.
-
-A PowerShell equivalent is available for Windows:
-```powershell
-$env:GAS_WEBAPP_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
-.\scripts\post-push-notify.ps1
-```
-
-### Manual curl
-
-```bash
-# Report a change
-curl -sL \
-  -d '{"action":"reportChange","author":"your-name","files":["WebApp.gs"],"changelog":"description of change","commitHash":"abc1234"}' \
-  -H "Content-Type: application/json" \
-  "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec" | jq .
-
-# Health check
-curl -sL "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?action=health" | jq .
-
-# Ping
-curl -sL "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?action=ping" | jq .
-```
-
-**Important**: Use `curl -sL -d '...'` for POST requests, NOT `curl -X POST`. GAS returns a 302 redirect; `-d` implies POST for the initial request and follows the redirect as GET, while `-X POST` forces POST on the redirect target (which returns 405).
+| Secret | Purpose |
+|--------|---------|
+| `GAS_WEBAPP_URL` | GAS exec URL for the documentation batch workflow |
 
 ## API Reference
 
-### GET Endpoints
+### GET
 
-| Action | URL | Description |
-|--------|-----|-------------|
-| `ping` | `?action=ping` | Returns `{ status, timestamp, correlationId }` |
-| `health` | `?action=health` | Returns spreadsheet info and sheet list |
-| `getLogs` | `?action=getLogs&correlationId=X` | Fetches log entries from `_LOGS` sheet |
+| Action | URL | Response |
+|--------|-----|----------|
+| `ping` | `?action=ping` | `{ status, timestamp, correlationId }` |
+| `health` | `?action=health` | `{ status, spreadsheet: { id, name, sheets } }` |
+| `getLogs` | `?action=getLogs&correlationId=X` | `{ count, logs: [...] }` |
 
-### POST Endpoints
+### POST
 
-#### `reportChange`
+All POST requests use: `curl -sL -d '...' -H "Content-Type: application/json" URL`
+Do NOT use `-X POST` — GAS 302 redirect breaks it. See [gotchas.md](gotchas.md).
 
-Reports a code change. Writes to `_CHANGE_LOG` sheet and optionally forwards to VPS.
+#### reportChange (plan 1)
 
-**Request**:
+Single-commit notification from trigger scripts.
+
 ```json
 {
   "action": "reportChange",
-  "author": "developer-name",
-  "files": ["WebApp.gs", "ChangeTracker.gs"],
-  "changelog": "Description of what changed",
+  "author": "dev-name",
+  "files": ["WebApp.gs"],
+  "changelog": "description of change",
   "commitHash": "abc1234"
 }
 ```
 
-| Field | Type | Required | Default |
-|-------|------|----------|---------|
-| `action` | string | Yes | — |
-| `author` | string | No | `"unknown"` |
-| `files` | string[] | Yes (non-empty) | — |
-| `changelog` | string | Yes | — |
-| `commitHash` | string | No | `null` |
+Response: `{ success, correlationId, tracking: { changeLogRow, vpsStatus, vpsResponse } }`
 
-**Response (success)**:
+#### reportBatch (plan 2)
+
+Batched documentation request from GitHub Actions.
+
 ```json
 {
-  "success": true,
-  "correlationId": "gas_1771157536049_5a1lb8dd",
-  "tracking": {
-    "changeLogRow": 8,
-    "vpsStatus": 200,
-    "vpsResponse": "{\"received\":true,\"timestamp\":\"...\"}",
-    "error": null
-  }
+  "action": "reportBatch",
+  "trigger": "manual|scheduled",
+  "triggeredBy": "github-username",
+  "repository": "owner/repo",
+  "range": { "from": "full-sha", "to": "full-sha", "commitCount": 4 },
+  "commits": [{ "sha": "...", "shortSha": "...", "author": "...", "message": "...", "timestamp": "..." }],
+  "filesChanged": ["api/WebApp.gs"],
+  "pathFilter": "apps-script/src/"
 }
 ```
 
-When VPS is not configured, `vpsStatus` is `"skipped"` and `vpsResponse` is `null`.
+Response: `{ success, correlationId, tracking: { changeLogRow, vpsStatus, vpsAck, vpsBatchId } }`
 
-#### `writeLog`
+The GitHub Action only moves the `last-documented` tag when `vpsAck == true`.
 
-Writes a log entry to the `_LOGS` sheet.
+#### writeLog
 
-**Request**:
 ```json
-{
-  "action": "writeLog",
-  "level": "INFO",
-  "category": "manual",
-  "message": "Log message here",
-  "metadata": {}
-}
+{ "action": "writeLog", "level": "INFO", "category": "manual", "message": "..." }
 ```
 
 ## Stub Server
 
-A zero-dependency Node.js server that simulates a VPS receiving change notifications.
+Zero-dependency Node.js server simulating the VPS.
 
 ```bash
-# Start (default port 3456)
-node stub-server/server.js
-
-# Custom port
-PORT=4000 node stub-server/server.js
+node stub-server/server.js           # Port 3456 (default)
+PORT=4000 node stub-server/server.js  # Custom port
 ```
 
-Accepts `POST /changelog` — parses the JSON body, pretty-prints it with a timestamp, and returns `{ received: true, timestamp }`. All other routes return 404.
+**Endpoints** (plan 2):
+- `POST /changelog` — Accepts change/batch payloads. Returns `{ ack: true, batchId }` for batches, `{ received: true }` for legacy.
+- `GET /batches` — Lists stored batches.
+- `GET /batches/:id` — Returns full batch payload.
 
-To expose it to GAS via ngrok:
-```bash
-ngrok http 3456
-# Copy the HTTPS forwarding URL → set as CHANGE_TRACKER_VPS_URL in Script Properties
-# Append /changelog to the URL (e.g., https://xxxx.ngrok-free.app/changelog)
-```
+Batches are stored to `stub-server/batches/` (gitignored).
 
 ## Enterprise Migration
 
-To migrate this prototype into the enterprise repo:
+1. Copy `apps-script/src/tracking/ChangeTracker.gs` to enterprise
+2. Apply WebApp.gs diff: add `reportChange` + `reportBatch` cases and handlers
+3. Copy `.github/workflows/doc-batch.yml` (update `PATH_FILTER` and secrets)
+4. Copy `scripts/build-batch-payload.sh`
+5. Set GAS Script Properties + GitHub secrets
+6. Set `last-documented` tag at desired starting point
+7. No stub server needed — point to real VPS
 
-1. **Copy** `apps-script/src/tracking/ChangeTracker.gs` into the enterprise `apps-script/src/tracking/` directory
-2. **Apply the WebApp.gs diff**: add the `reportChange` case to the doPost switch and the `handleReportChange()` function
-3. **Set Script Properties** in the enterprise GAS project (`CHANGE_TRACKER_ENABLED`, `CHANGE_TRACKER_VPS_URL`, `GAS_DEPLOYMENT_URL`)
-4. **Update** the enterprise `apps-script/README.md` with the new endpoint documentation
-
-No other files need to change — `CorrelationId.gs` and `LogService.gs` are already enterprise copies used as-is.
+`CorrelationId.gs` and `LogService.gs` are already enterprise copies used as-is.
 
 ## File Structure
 
@@ -228,38 +180,35 @@ No other files need to change — `CorrelationId.gs` and `LogService.gs` are alr
 cash_synch_proto/
 ├── CLAUDE.md                          # Project conventions and agent rules
 ├── README.md                          # This file
-├── plan.md                            # Implementation plan (5 phases)
+├── plan.md                            # Plan 1: base GAS web app (complete)
+├── plan2.md                           # Plan 2: batched documentation pipeline
 ├── gotchas.md                         # Known issues and workarounds
+├── .env.example                       # Environment config template
 ├── apps-script/
 │   └── src/
-│       ├── appsscript.json            # GAS manifest (V8, anonymous access)
+│       ├── appsscript.json            # GAS manifest
 │       ├── api/
-│       │   ├── WebApp.gs              # HTTP endpoints (doGet, doPost)
-│       │   ├── CLAUDE.md              # Module docs
-│       │   └── changelog.md
+│       │   └── WebApp.gs              # HTTP endpoints (doGet, doPost)
 │       ├── correlation/
-│       │   ├── CorrelationId.gs       # Request correlation (enterprise copy, read-only)
-│       │   ├── CLAUDE.md
-│       │   └── changelog.md
+│       │   └── CorrelationId.gs       # Enterprise copy, read-only
 │       ├── logging/
-│       │   ├── LogService.gs          # Structured logging to _LOGS sheet (enterprise copy, read-only)
-│       │   ├── CLAUDE.md
-│       │   └── changelog.md
+│       │   └── LogService.gs          # Enterprise copy, read-only
 │       └── tracking/
-│           ├── ChangeTracker.gs       # Change notification + VPS relay service
-│           ├── CLAUDE.md
-│           └── changelog.md
+│           └── ChangeTracker.gs       # Change notification + VPS relay
+├── .github/
+│   └── workflows/
+│       └── doc-batch.yml              # Documentation batch workflow (plan 2)
 ├── stub-server/
-│   ├── server.js                      # Local VPS stub (Node.js, zero dependencies)
-│   ├── CLAUDE.md
-│   └── changelog.md
+│   ├── server.js                      # Local VPS stub
+│   └── batches/                       # Stored batch payloads (gitignored)
 ├── scripts/
-│   ├── post-push-notify.sh            # Bash trigger script
-│   ├── post-push-notify.ps1           # PowerShell trigger script
-│   ├── CLAUDE.md
-│   └── changelog.md
+│   ├── dev-start.sh                   # One-command dev environment
+│   ├── build-batch-payload.sh         # Batch payload builder (used by GitHub Action)
+│   ├── post-push-notify.sh            # Single-commit trigger (plan 1)
+│   └── post-push-notify.ps1           # PowerShell equivalent
 ├── docs/
-│   └── test-report.md                 # Phase 4 e2e test results
+│   ├── test-report.md                 # Plan 1 test results
+│   └── test-report-plan2.md           # Plan 2 test results
 └── .orchestrator/
     └── state.md                       # Agent orchestration state
 ```

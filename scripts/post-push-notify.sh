@@ -16,6 +16,15 @@
 
 set -euo pipefail
 
+# Source .env if it exists (project root)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/../.env"
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    source "$ENV_FILE"
+    set +a
+fi
+
 # Configuration
 GAS_WEBAPP_URL="${GAS_WEBAPP_URL:-https://YOUR_GAS_SCRIPT_URL_HERE/exec}"
 APPS_SCRIPT_DIR="apps-script/src"
