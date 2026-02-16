@@ -1,8 +1,8 @@
 # Orchestrator State — GAS Change Tracker Sandbox
 
-> **Updated**: 2026-02-16T11:10Z
+> **Updated**: 2026-02-16T12:30Z
 > **Active Plan**: plan2.md (Automated Documentation Pipeline)
-> **Session**: Phase 0 complete — README updated, plan2 trimmed. Awaiting user for next phases.
+> **Session**: Phase 0 complete + auto-deploy implemented. Awaiting user for next phases.
 
 ---
 
@@ -29,7 +29,7 @@ Next: Phases 1, 2, 3 (all independent — can launch in parallel)
 - `.env.example` — config template (committed)
 - `.env` — local config with sandbox values (gitignored)
 - `scripts/dev-start.sh` — single-command stub+ngrok startup
-- `scripts/post-push-notify.sh` — now auto-sources `.env`
+- `scripts/post-push-notify.sh` — auto-sources `.env`, auto push+deploy when `GAS_DEPLOYMENT_ID` set
 - `apps-script/src/api/WebApp.gs` — stray test line removed
 - `clasp push -f` — succeeded (5 files)
 - Agent definitions: `gas-batch-agent.md` created, `tooling-agent.md` updated
@@ -82,6 +82,7 @@ Do NOT use `-X POST` — it breaks on GAS 302 redirect. See gotchas.md.
 - (plan2) gas-batch-agent replaces gas-tracker-agent for plan2 GAS work
 - (plan2) plan2.md Phase 0 section trimmed after completion (full spec preserved in git history)
 - (plan2) README.md updated with detailed e2e testing workflow and URL update matrix
+- (plan2) DEC-004: Stable deployment URL via `clasp deploy -i` + auto push+deploy in post-push-notify.sh
 
 ## Gotchas Encountered
 See gotchas.md for full list.
@@ -96,3 +97,4 @@ See gotchas.md for full list.
 | 352bfdf | Phase 5: v1.0.0 production deployment + README | 1 |
 | 509b1a3 | New plan (plan2.md added) | 2 |
 | 36b5e53 | Phase 0: dev environment hardening + cleanup | 2 |
+| (pending) | Auto push+deploy in post-push-notify.sh (DEC-004) | 2 |

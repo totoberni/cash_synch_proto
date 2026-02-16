@@ -52,7 +52,10 @@ Key difference: the VPS fetches full diffs from GitHub API using the commit rang
 
 ```bash
 # 1. Configure
-cp .env.example .env          # Fill in your GAS deployment URL
+cp .env.example .env
+# Edit .env — set at minimum:
+#   GAS_WEBAPP_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
+#   GAS_DEPLOYMENT_ID=YOUR_DEPLOYMENT_ID   (enables auto push+deploy)
 
 # 2. Start dev environment (stub server + ngrok in one terminal)
 bash scripts/dev-start.sh
@@ -80,7 +83,7 @@ post-push-notify.sh  ──POST──>  GAS /exec  ──forwards──>  ngrok 
 
 | URL | What it is | Where it lives | When it changes |
 |-----|-----------|----------------|-----------------|
-| `GAS_WEBAPP_URL` | GAS /exec deployment URL | `.env` (local, gitignored) | Only on `clasp deploy` (new deployment) |
+| `GAS_WEBAPP_URL` | GAS /exec deployment URL | `.env` (local, gitignored) | Never (when using `clasp deploy -i`) |
 | `CHANGE_TRACKER_VPS_URL` | ngrok public URL + `/changelog` | GAS Script Properties (IDE) | Every ngrok session (free tier) |
 
 ### Step-by-step
@@ -109,7 +112,22 @@ In the GAS IDE: Project Settings > Script Properties > Add/update:
 - `CHANGE_TRACKER_ENABLED` = `true`
 - `GAS_DEPLOYMENT_URL` = your /exec URL (optional, included in VPS payload metadata)
 
-**Terminal 2 — Edit, push, and test:**
+**Terminal 2 — Edit, push, deploy, and test:**
+
+If `GAS_DEPLOYMENT_ID` is set in `.env`, the trigger script handles push + deploy + notify in one command:
+
+```bash
+# Make changes, commit, then run the trigger script
+git add -A && git commit -m "test: some change"
+bash scripts/post-push-notify.sh
+# This will:
+#   1. clasp push -f (upload code to GAS)
+#   2. clasp deploy -i $GAS_DEPLOYMENT_ID (update /exec in-place — URL unchanged)
+#   3. POST reportChange to GAS with git metadata
+# Terminal 1 should print the received payload
+```
+
+Without `GAS_DEPLOYMENT_ID`, you can push and test manually:
 
 ```bash
 # Push code changes to GAS
@@ -129,10 +147,6 @@ curl -sL -d '{
 }' -H "Content-Type: application/json" "$GAS_WEBAPP_URL" | jq .
 # Response should show vpsStatus: 200
 # Terminal 1 should print the received payload
-
-# Or use the trigger script after a git commit:
-git add -A && git commit -m "test: some change"
-bash scripts/post-push-notify.sh
 ```
 
 **Verify in Google Sheets:**
@@ -143,12 +157,13 @@ bash scripts/post-push-notify.sh
 
 | Action | `.env` update? | Script Properties update? |
 |--------|---------------|--------------------------|
-| `clasp push -f` (push code to HEAD) | No | No |
+| `post-push-notify.sh` (with `GAS_DEPLOYMENT_ID` set) | No | No |
+| `clasp push -f` (push code to HEAD only) | No | No |
 | `clasp deploy` (new frozen deployment) | Yes — new /exec URL | No |
 | `clasp deploy -i <id>` (update existing deployment) | No — same URL | No |
 | Restart `dev-start.sh` (new ngrok session) | No | Yes — new ngrok URL |
 
-**Important**: `clasp push` updates HEAD code but does NOT update the frozen /exec deployment. To test new code via /exec, you must either create a new deployment or update the existing one.
+**Important**: With `GAS_DEPLOYMENT_ID` configured, `post-push-notify.sh` handles push + deploy + notify automatically. The /exec URL stays stable because it uses `clasp deploy -i` (in-place update). Without it, `clasp push` only updates HEAD code and does NOT update the frozen /exec deployment.
 
 ## Configuration
 
@@ -156,6 +171,8 @@ bash scripts/post-push-notify.sh
 
 ```bash
 GAS_WEBAPP_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
+GAS_DEPLOYMENT_ID=YOUR_DEPLOYMENT_ID    # Enables auto push+deploy in post-push-notify.sh
+CLASP_DIR=apps-script                   # Directory containing .clasp.json
 STUB_SERVER_PORT=3456
 ```
 
@@ -289,7 +306,7 @@ cash_synch_proto/
 ├── scripts/
 │   ├── dev-start.sh                   # One-command dev environment
 │   ├── build-batch-payload.sh         # Batch payload builder (used by GitHub Action)
-│   ├── post-push-notify.sh            # Single-commit trigger (plan 1)
+│   ├── post-push-notify.sh            # Push + deploy + notify (one command)
 │   └── post-push-notify.ps1           # PowerShell equivalent
 ├── docs/
 │   ├── test-report.md                 # Plan 1 test results

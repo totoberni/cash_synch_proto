@@ -25,6 +25,12 @@
 **Decision**: All GAS code uses `var`. No `let`, no `const`.
 **Consequence**: Agents must be explicitly told. Add to module CLAUDE.md files and root conventions.
 
+### DEC-004: Stable deployment URL via in-place updates
+**Date**: 2026-02-16 | **Phase**: Plan 2, Phase 0 | **By**: orchestrator
+**Context**: Every `clasp deploy` creates a new /exec URL, forcing manual updates to `.env`, Script Properties, and GitHub secrets. This breaks automation and is error-prone.
+**Decision**: Use `clasp deploy -i <DEPLOYMENT_ID>` (in-place update) to keep the /exec URL stable. Store `GAS_DEPLOYMENT_ID` in `.env`. The `post-push-notify.sh` script auto-pushes and deploys before notifying when `GAS_DEPLOYMENT_ID` is configured.
+**Consequence**: After initial setup, the /exec URL never changes. `.env` and Script Properties only need configuration once. The trigger script becomes a one-command "push + deploy + notify" flow. In enterprise, the VPS URL is also stable, making the entire pipeline fully automated.
+
 ### DEC-003: muteHttpExceptions is mandatory
 **Date**: 2026-02-14 | **Phase**: Design | **By**: plan author
 **Context**: Without `muteHttpExceptions: true`, GAS throws on 4xx/5xx from VPS, crashing the entire handler.

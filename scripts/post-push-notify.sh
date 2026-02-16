@@ -3,14 +3,22 @@
 # Post-Push Notification Script — Bash
 #
 # Gathers git metadata and POSTs change notification to GAS web app.
+# Optionally pushes and deploys to GAS before notifying (if configured).
 #
 # Prerequisites:
 #   - git (for commit metadata)
 #   - curl (for HTTP POST)
 #   - jq (for JSON array construction)
+#   - clasp (optional, for auto-push/deploy)
+#
+# Environment variables (set via .env or export):
+#   - GAS_WEBAPP_URL: The GAS web app /exec URL (required)
+#   - GAS_DEPLOYMENT_ID: The clasp deployment ID for in-place updates (optional)
+#   - CLASP_DIR: Path to apps-script directory with .clasp.json (default: "apps-script")
 #
 # Usage:
 #   export GAS_WEBAPP_URL="https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec"
+#   export GAS_DEPLOYMENT_ID="AKfycby..."  # optional
 #   ./scripts/post-push-notify.sh
 #
 
@@ -27,18 +35,68 @@ fi
 
 # Configuration
 GAS_WEBAPP_URL="${GAS_WEBAPP_URL:-https://YOUR_GAS_SCRIPT_URL_HERE/exec}"
+CLASP_DIR="${CLASP_DIR:-apps-script}"
 APPS_SCRIPT_DIR="apps-script/src"
 
 # Color codes for output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}┌────────────────────────────────────────────────────────────────┐${NC}"
 echo -e "${BLUE}│ GAS Change Tracker — Post-Push Notification                    │${NC}"
 echo -e "${BLUE}└────────────────────────────────────────────────────────────────┘${NC}"
 echo ""
+
+# ────────────────────────────────────────────────────────────────
+# Optional: Push and Deploy to GAS (if GAS_DEPLOYMENT_ID is set)
+# ────────────────────────────────────────────────────────────────
+
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ -n "${GAS_DEPLOYMENT_ID:-}" ] && [[ ! "$GAS_DEPLOYMENT_ID" == *"YOUR_DEPLOYMENT_ID_HERE"* ]]; then
+    if command -v clasp &> /dev/null; then
+        echo -e "${BLUE}Pushing to GAS and updating deployment...${NC}"
+        echo ""
+
+        # Gather commit message early (for deploy description)
+        if command -v git &> /dev/null; then
+            DEPLOY_COMMIT_MSG=$(git log -1 --pretty=format:"%s" 2>/dev/null || echo "Manual push")
+        else
+            DEPLOY_COMMIT_MSG="Manual push"
+        fi
+
+        # Run clasp push
+        if (cd "$PROJECT_ROOT/$CLASP_DIR" && clasp push -f 2>&1); then
+            echo -e "${GREEN}✓ clasp push succeeded${NC}"
+
+            # Run clasp deploy (in-place update)
+            if (cd "$PROJECT_ROOT/$CLASP_DIR" && clasp deploy -i "$GAS_DEPLOYMENT_ID" -d "auto: $DEPLOY_COMMIT_MSG" 2>&1); then
+                echo -e "${GREEN}✓ GAS deployment updated in-place (URL unchanged)${NC}"
+                echo "  Deployment ID: $GAS_DEPLOYMENT_ID"
+            else
+                echo -e "${YELLOW}⚠ Warning: clasp deploy failed (continuing with notification)${NC}"
+            fi
+        else
+            echo -e "${YELLOW}⚠ Warning: clasp push failed (continuing with notification)${NC}"
+        fi
+
+        echo ""
+    else
+        echo -e "${YELLOW}Info: clasp not found (skipping push/deploy)${NC}"
+        echo ""
+    fi
+else
+    echo -e "${YELLOW}Info: GAS_DEPLOYMENT_ID not set (skipping push/deploy)${NC}"
+    echo "  Set it to enable auto-push/deploy: export GAS_DEPLOYMENT_ID=\"AKfycby...\""
+    echo ""
+fi
+
+# ────────────────────────────────────────────────────────────────
+# Gather Git Metadata
+# ────────────────────────────────────────────────────────────────
 
 # Check if git is available
 if ! command -v git &> /dev/null; then
