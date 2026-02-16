@@ -16,7 +16,7 @@ function doGet(e) {
 
   var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
   var response;
-
+  // trololol I made an edit
   try {
     switch (action) {
       case 'ping':
