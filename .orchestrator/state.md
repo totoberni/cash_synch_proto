@@ -1,8 +1,8 @@
 # Orchestrator State — GAS Change Tracker Sandbox
 
-> **Updated**: 2026-02-16T10:50Z
+> **Updated**: 2026-02-16T11:10Z
 > **Active Plan**: plan2.md (Automated Documentation Pipeline)
-> **Session**: Phase 0 complete — ready for Phases 1/2/3 (parallel)
+> **Session**: Phase 0 complete — README updated, plan2 trimmed. Awaiting user for next phases.
 
 ---
 
@@ -80,6 +80,8 @@ Do NOT use `-X POST` — it breaks on GAS 302 redirect. See gotchas.md.
 - (plan1) UrlFetchApp needs separate OAuth authorization via IDE Run
 - (plan2) plan2.md is READ-ONLY — state tracked here in .orchestrator/state.md
 - (plan2) gas-batch-agent replaces gas-tracker-agent for plan2 GAS work
+- (plan2) plan2.md Phase 0 section trimmed after completion (full spec preserved in git history)
+- (plan2) README.md updated with detailed e2e testing workflow and URL update matrix
 
 ## Gotchas Encountered
 See gotchas.md for full list.

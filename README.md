@@ -62,8 +62,93 @@ bash scripts/dev-start.sh
 #    CHANGE_TRACKER_ENABLED = true
 
 # 4. Test
+source .env
 curl -sL "$GAS_WEBAPP_URL?action=ping" | jq .
 ```
+
+## E2E Testing Workflow
+
+The testing setup connects three components via two URLs:
+
+```
+post-push-notify.sh  ──POST──>  GAS /exec  ──forwards──>  ngrok URL  ──tunnel──>  localhost:3456 (stub)
+     reads .env                    reads Script Properties
+   (GAS_WEBAPP_URL)            (CHANGE_TRACKER_VPS_URL)
+```
+
+### Two URLs, two config locations
+
+| URL | What it is | Where it lives | When it changes |
+|-----|-----------|----------------|-----------------|
+| `GAS_WEBAPP_URL` | GAS /exec deployment URL | `.env` (local, gitignored) | Only on `clasp deploy` (new deployment) |
+| `CHANGE_TRACKER_VPS_URL` | ngrok public URL + `/changelog` | GAS Script Properties (IDE) | Every ngrok session (free tier) |
+
+### Step-by-step
+
+**Terminal 1 — Start the dev environment:**
+
+```bash
+bash scripts/dev-start.sh
+# Starts stub server (localhost:3456) + ngrok tunnel
+# Prints the ngrok HTTPS URL — copy it
+# Keep this terminal running
+```
+
+**Browser — One-time GAS authorization (only after adding new .gs files or scopes):**
+
+```bash
+cd apps-script && clasp open    # Opens GAS IDE in browser
+```
+
+In the IDE: select any function (e.g. `doGet`) > Run > approve OAuth consent dialog. This authorizes `UrlFetchApp` for VPS forwarding.
+
+**Browser — Set Script Properties (after each ngrok restart):**
+
+In the GAS IDE: Project Settings > Script Properties > Add/update:
+- `CHANGE_TRACKER_VPS_URL` = `https://xxxx.ngrok-free.app/changelog` (from Terminal 1 output)
+- `CHANGE_TRACKER_ENABLED` = `true`
+- `GAS_DEPLOYMENT_URL` = your /exec URL (optional, included in VPS payload metadata)
+
+**Terminal 2 — Edit, push, and test:**
+
+```bash
+# Push code changes to GAS
+cd apps-script && clasp push -f
+
+# Smoke test
+source .env
+curl -sL "$GAS_WEBAPP_URL?action=ping" | jq .
+
+# Full e2e: reportChange flows through GAS -> ngrok -> stub server
+curl -sL -d '{
+  "action": "reportChange",
+  "author": "manual-test",
+  "files": ["WebApp.gs"],
+  "changelog": "Testing e2e flow",
+  "commitHash": "abc1234"
+}' -H "Content-Type: application/json" "$GAS_WEBAPP_URL" | jq .
+# Response should show vpsStatus: 200
+# Terminal 1 should print the received payload
+
+# Or use the trigger script after a git commit:
+git add -A && git commit -m "test: some change"
+bash scripts/post-push-notify.sh
+```
+
+**Verify in Google Sheets:**
+- `_CHANGE_LOG` tab: new row with your change details + VPS status
+- `_LOGS` tab: `changetracker.notify` trace entry
+
+### When do URLs need updating?
+
+| Action | `.env` update? | Script Properties update? |
+|--------|---------------|--------------------------|
+| `clasp push -f` (push code to HEAD) | No | No |
+| `clasp deploy` (new frozen deployment) | Yes — new /exec URL | No |
+| `clasp deploy -i <id>` (update existing deployment) | No — same URL | No |
+| Restart `dev-start.sh` (new ngrok session) | No | Yes — new ngrok URL |
+
+**Important**: `clasp push` updates HEAD code but does NOT update the frozen /exec deployment. To test new code via /exec, you must either create a new deployment or update the existing one.
 
 ## Configuration
 
