@@ -15,7 +15,8 @@ function doGet(e) {
   setCurrentCorrelationId(correlationId);
 
   var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
-  var response; // edit removed
+  var response; 
+  // Testing testing aefhcQ;VICDB
   try {
     switch (action) {
       case 'ping':
