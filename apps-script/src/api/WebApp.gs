@@ -15,8 +15,7 @@ function doGet(e) {
   setCurrentCorrelationId(correlationId);
 
   var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
-  var response;
-  // trololol I made an edit
+  var response; // edit removed
   try {
     switch (action) {
       case 'ping':
