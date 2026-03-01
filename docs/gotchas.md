@@ -1,12 +1,20 @@
 # Gotcha storage file
-<!-- Uodate responsibility of ANY agent that solves a known issue of the codebase. Update and refer to accordingly -->
+<!-- Update responsibility of ANY agent that solves a known issue of the codebase. Update and refer to accordingly -->
 This file stores common issues that have been solved to allow other agents not to repeat the same mistakes
+
+## Appendix 0: Project Layout Gotchas
+
+| Gotcha | Explanation | Workaround |
+|--------|-------------|------------|
+| Test reports go in `docs/` ONLY | A Phase 4 agent incorrectly placed the test report at `apps-script/docs/test-report-plan2.md` instead of the project root `docs/` directory. This was fixed during Phase 5 cleanup. | ALL reports, test results, and documentation output belong in the **root `docs/` directory** — never in module subdirectories like `apps-script/docs/`. |
+| Plans and state files live in `.orchestrator/` | `plan.md`, `plan2.md`, `VPSs.md`, `state.md`, and all orchestration state files live in `.orchestrator/`. Only `CLAUDE.md` and `README.md` stay at project root. | Check `.orchestrator/` for plan files, not the project root. |
+| `gotchas.md` lives in `docs/` | This file was moved from project root to `docs/gotchas.md` for organization. | All agent definitions reference `docs/gotchas.md` — use that path. |
 
 ## Appendix A: GAS Gotchas You'll Hit
 
 | Gotcha | Explanation | Workaround |
 |--------|-------------|------------|
-| `clasp push` doesn't update deployments | Deployments are frozen snapshots | Use `/dev` URL for testing, or `clasp deploy -i <id>` to update |
+| `clasp push` doesn't update deployments | Deployments are frozen snapshots. **This means `/exec` URLs serve OLD code after `clasp push`!** Phase 5.5 was bitten by this — code changes appeared to have no effect because the `/exec` deployment was still running the previous version. | **Always** run `clasp deploy -i <deployment-id>` after `clasp push -f` to update the active `/exec` deployment. Use `/dev` URL for quick testing (always runs HEAD). |
 | Authorization required on first deploy | Google needs you to grant permissions to the script | Click through the OAuth consent screen manually |
 | 6-minute execution limit | GAS kills scripts after 6 min | Not an issue for our lightweight POST handler |
 | No `import`/`export` | All .gs files share one global scope | Use singleton objects and unique function names |

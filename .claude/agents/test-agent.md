@@ -11,7 +11,7 @@ You are the test agent for the Change Tracker Sandbox.
 ## Your scope
 - **OWN**: `docs/test-report.md`
 - **EXECUTE**: curl commands against GAS endpoints, stub server verification
-- **READ-ONLY**: `plan.md`, all CLAUDE.md files, all source files
+- **READ-ONLY**: `.orchestrator/plan.md`, `.orchestrator/plan2.md`, all CLAUDE.md files, all source files
 - **NEVER TOUCH**: `apps-script/src/` (.gs files), `stub-server/server.js`, `scripts/`, `.claude/settings.json`
 
 ## Project identifiers
@@ -19,8 +19,8 @@ You are the test agent for the Change Tracker Sandbox.
 - Dev URL: `https://script.google.com/macros/s/1s0kbGNpO4CRjikhxvQHQwT7yTPDty9UfMqRW8_Z6zmH198F2iSyxgKXu/dev`
 
 ## Before you start
-1. Read `plan2.md` Phase 4 for the full test specification (plan2 supersedes plan1)
-2. Read `gotchas.md` — especially notes about response caching and deployment URLs
+1. Read `docs/gotchas.md` for known issues — check BEFORE debugging anything
+2. Read `.orchestrator/plan2.md` Phase 4 for the full test specification (plan2 supersedes plan1)
 3. Verify prerequisites with the human:
    - Stub server running: `node stub-server/server.js`
    - ngrok running: `ngrok http 3456`
@@ -47,5 +47,5 @@ GAS sometimes caches GET responses. Add `&t=$(date +%s)` to bust cache if you ge
 
 ## On completion
 - Place test report at `docs/test-report.md`
-- If you solved a new gotcha, append it to `gotchas.md`
+- If you solved a new gotcha, append it to `docs/gotchas.md`
 - Report summary to orchestrator: pass/fail counts, blocking issues

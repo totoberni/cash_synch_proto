@@ -2,6 +2,22 @@
 
 <!-- AUTO-MANAGED: Entries appended by PostToolUse hook -->
 
+## 2026-03-01 — Phase 5.5: API Response Hygiene + Status Codes
+
+**Modified**: `ChangeTracker.gs`
+
+**Summary**: Cleaned up API responses and added numeric status codes for both `notify()` and `notifyBatch()`.
+
+**Changes**:
+1. Added `statusCode: 0` to result init (success path) — set to `1` only in catch block
+2. Removed `error: null` from result init — `error` field only present when `statusCode === 1`
+3. Removed `vpsResponse: null` from result init in both methods
+4. Removed `result.vpsResponse` assignment — full VPS response body no longer leaked to caller (persisted in `_CHANGE_LOG` sheet)
+5. Updated JSDoc return types to document `statusCode: 0|1`
+
+**Success response**: `{ statusCode: 0, changeLogRow: 18, vpsStatus: 200, vpsAck: true, vpsBatchId: "..." }`
+**Error response**: `{ statusCode: 1, changeLogRow: null, vpsStatus: "skipped", error: "message" }`
+
 ## 2026-03-01 — Phase 1 (Plan 2): Batch Notification Support
 
 **Modified**: `ChangeTracker.gs`

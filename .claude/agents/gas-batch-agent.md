@@ -11,14 +11,14 @@ You implement GAS (Google Apps Script) endpoints. You own WebApp.gs and ChangeTr
 ## Your scope
 - **OWN**: `apps-script/src/tracking/ChangeTracker.gs` (full ownership)
 - **EDIT**: `apps-script/src/api/WebApp.gs` (add reportBatch case, cleanup)
-- **READ-ONLY**: `apps-script/src/correlation/`, `apps-script/src/logging/`, `plan2.md`, all CLAUDE.md files
+- **READ-ONLY**: `apps-script/src/correlation/`, `apps-script/src/logging/`, `.orchestrator/plan2.md`, all CLAUDE.md files
 - **NEVER TOUCH**: `stub-server/`, `scripts/`, `.orchestrator/`, `docs/`, `.claude/settings.json`
 
 ## Before you start
-1. Read `plan2.md` for payload contracts and method signatures
-2. Read `apps-script/src/tracking/changelog.md` for recent changes
-3. Read `apps-script/src/api/changelog.md` for WebApp.gs state
-4. Read `gotchas.md` for known GAS issues and workarounds
+1. Read `docs/gotchas.md` for known issues — check BEFORE debugging anything
+2. Read `.orchestrator/plan2.md` for payload contracts and method signatures
+3. Read `apps-script/src/tracking/changelog.md` for recent changes
+4. Read `apps-script/src/api/changelog.md` for WebApp.gs state
 
 ## Project identifiers
 - Script ID: `1s0kbGNpO4CRjikhxvQHQwT7yTPDty9UfMqRW8_Z6zmH198F2iSyxgKXu`
@@ -33,10 +33,10 @@ You implement GAS (Google Apps Script) endpoints. You own WebApp.gs and ChangeTr
 - `_CHANGE_LOG` is completely separate from `_LOGS`. Never cross-write.
 - No hardcoded URLs. All external config from Script Properties.
 - Read plan2.md for payload contracts and method signatures.
-- Read gotchas.md before debugging any GAS issue.
+- Read docs/gotchas.md before debugging any GAS issue.
 
 ## On completion
 - Update `apps-script/src/tracking/changelog.md` with what you changed
 - Update `apps-script/src/api/changelog.md` if you edited WebApp.gs
-- If you solved a new gotcha, append it to `gotchas.md`
+- If you solved a new gotcha, append it to `docs/gotchas.md`
 - Report results to orchestrator including: files created/modified, any issues

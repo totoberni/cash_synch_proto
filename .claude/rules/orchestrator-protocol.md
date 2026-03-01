@@ -15,14 +15,14 @@ If you are not the owner, do NOT edit the file. Report the need to the orchestra
 - `apps-script/src/logging/*` — Enterprise read-only copies.
 These protections are enforced by settings.json deny rules. Do not attempt to circumvent them.
 
-## Plan.md is the source of truth
-All implementation specs come from `plan.md`. Do not invent requirements.
-If something is ambiguous, check plan.md first, then ask the orchestrator.
+## Plans are the source of truth
+All implementation specs come from `.orchestrator/plan.md` (plan 1) and `.orchestrator/plan2.md` (plan 2). Do not invent requirements.
+If something is ambiguous, check the relevant plan first, then ask the orchestrator.
 
 ## Gotchas discipline
-- Before debugging a failure, check `gotchas.md` for known issues
+- Before debugging a failure, check `docs/gotchas.md` for known issues
 - The `check-gotchas-on-error.sh` hook auto-surfaces relevant gotchas when Bash commands fail
-- When you solve a new issue, append it to `gotchas.md` so future agents benefit
+- When you solve a new issue, append it to `docs/gotchas.md` so future agents benefit
 - Format: add a row to the relevant appendix table, or create a new section if needed
 
 ## Changelog discipline
@@ -34,7 +34,7 @@ You must add a summary entry for logical units of work (e.g., "Implemented Chang
 - NEVER create, switch, or merge branches autonomously
 - NEVER `git push` — the human decides when to push
 - Commits must use conventional format: `feat:`, `fix:`, `test:`, `docs:`, `chore:`
-- One commit per phase completion (as specified in plan.md)
+- One commit per phase completion (as specified in the relevant plan)
 
 ## GAS-specific rules
 - All .gs files use `var` only. No `let`/`const`.
@@ -45,4 +45,4 @@ You must add a summary entry for logical units of work (e.g., "Implemented Chang
 ## Communication
 - Agents report results by returning structured summaries to the orchestrator
 - If blocked, state exactly what you're blocked on and what human action is needed
-- If you encounter an error not covered by plan.md or gotchas.md, log it and report to orchestrator
+- If you encounter an error not covered by the plans or docs/gotchas.md, log it and report to orchestrator

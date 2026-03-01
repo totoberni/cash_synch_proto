@@ -966,6 +966,212 @@ git tag v2.0.0
 
 ---
 
+## Phase 5.5 — Pre-Phase 6 Cleanup + Handshake Verification
+
+**Goal**: Address API hygiene issues and payload contract violations found during manual e2e testing. Then run comprehensive handshake failure tests to verify the ack-based tag movement logic before migrating to enterprise.
+
+**Agent assignment**: Orchestrator coordinates. gas-batch-agent for GAS fixes, test-agent for handshake verification.
+
+### Task 5.5.1 — API Response Hygiene (COMPLETE)
+
+Code fixes already applied locally. Require `clasp push -f` + `clasp deploy -i` to take effect.
+
+| # | Fix | File | Description |
+|---|-----|------|-------------|
+| 1 | Add `statusCode: 0\|1` to responses | `ChangeTracker.gs` | Both `notify()` and `notifyBatch()` return `statusCode: 0` on success, `statusCode: 1` on error. `error` field only present when `statusCode === 1`. |
+| 2 | Remove `vpsResponse` from API response | `ChangeTracker.gs` | Full VPS response body no longer leaked to caller (already persisted in `_CHANGE_LOG` sheet). |
+| 3 | Fix commit ordering (newest→oldest to oldest→newest) | `build-batch-payload.sh` | Added `--reverse` to `git log` so commits array is oldest-first per payload contract spec. |
+| 4 | Filter WSL `.Zone.Identifier` artifacts | `build-batch-payload.sh` | Added `grep -v ':Zone.Identifier'` to strip NTFS metadata from `filesChanged`. |
+| 5 | Update `GAS_DEPLOYMENT_URL` Script Property | GAS IDE (manual) | **HUMAN GATE**: Must update to @9 exec URL. |
+
+### Task 5.5.2 — Deploy fixes to GAS
+
+**Human gate**: After human completes fix 5, then:
+
+```bash
+cd apps-script && clasp push -f
+clasp deploy -i AKfycbwkujDPilxb1TdmVOgS0n7rxFFX2UFdfcbtQb2betQGFX-69dt43Tln634P4srzktFF -d "v2.0.1 — API hygiene + handshake hardening"
+```
+
+**IMPORTANT**: `clasp push` alone does NOT update deployments (frozen snapshots). Must use `clasp deploy -i <id>` to update the @9 deployment in-place. See `docs/gotchas.md` Appendix A.
+
+### Task 5.5.3 — Handshake Failure Tests
+
+**Agent assignment**: test-agent
+
+**Prerequisite**: Task 5.5.2 complete (fixes deployed to GAS). Stub server + ngrok running.
+
+Run the following test matrix and record all results in `docs/test-report-plan2-v3.md`. Delete the previous `docs/test-report-plan2.md` before writing the new report.
+
+#### Test H1 — Happy path with status code verification
+
+```bash
+source .env
+bash scripts/build-batch-payload.sh "$FROM" "$TO" "apps-script/src/" "manual" "handshake-test" "owner/cash_synch_proto" \
+  | curl -sL -d @- -H "Content-Type: application/json" "$GAS_WEBAPP_URL" | jq .
+```
+
+**Verify**:
+1. Response contains `tracking.statusCode: 0`
+2. Response does NOT contain `tracking.error`
+3. Response does NOT contain `tracking.vpsResponse`
+4. `tracking.vpsAck: true` and `tracking.vpsBatchId` is a UUID
+5. `commits` array is oldest-first (check payload builder output separately)
+6. `filesChanged` does not contain any `:Zone.Identifier` entries
+7. Stub server received and stored the batch
+
+#### Test H2 — VPS down (ngrok returns 502)
+
+Stop the stub server (keep ngrok running so GAS gets a 502 from ngrok).
+
+```bash
+curl -sL -d '{
+  "action": "reportBatch", "trigger": "manual", "triggeredBy": "failure-test",
+  "repository": "owner/cash_synch_proto",
+  "range": {"from": "aaa", "to": "bbb", "commitCount": 1},
+  "commits": [{"sha": "aaa", "shortSha": "aaa", "author": "test", "message": "vps-down test", "timestamp": "2026-03-01T12:00:00Z"}],
+  "filesChanged": ["test.gs"], "pathFilter": "apps-script/src/"
+}' -H "Content-Type: application/json" "$GAS_WEBAPP_URL" | jq .
+```
+
+**Verify**:
+1. Response returns (no crash)
+2. `tracking.statusCode: 0` (GAS itself succeeded — VPS being down is not a GAS error)
+3. `tracking.vpsAck: false`
+4. `tracking.vpsStatus` is 502 or `"error"`
+5. `_CHANGE_LOG` sheet has row with non-200 vpsStatus
+6. This scenario means the GitHub Action would NOT move `last-documented` tag
+
+Restart the stub server after this test.
+
+#### Test H3 — VPS returns non-JSON response
+
+Temporarily modify the stub server to return plain text instead of JSON for POST /changelog:
+```bash
+# Quick one-liner stub that returns non-JSON
+node -e "require('http').createServer((q,r)=>{r.end('NOT JSON')}).listen(3456)"
+```
+
+Repeat the batch POST from H2.
+
+**Verify**:
+1. Response returns (no crash)
+2. `tracking.vpsAck: false` (JSON parse failed → ack is false)
+3. `tracking.vpsStatus: 200` (HTTP succeeded, but content wasn't valid ack)
+4. `_CHANGE_LOG` row shows `vpsResponse: "NOT JSON"`
+
+Stop the temp server, restart real stub after this test.
+
+#### Test H4 — VPS returns explicit `{ ack: false }`
+
+Temporarily modify stub to return `{ "ack": false, "reason": "storage full" }`:
+```bash
+node -e "require('http').createServer((q,r)=>{r.setHeader('Content-Type','application/json');r.end(JSON.stringify({ack:false,reason:'storage full'}))}).listen(3456)"
+```
+
+**Verify**:
+1. `tracking.vpsAck: false`
+2. `tracking.vpsBatchId: null`
+3. Tag would NOT move in GitHub Action (correct behavior)
+
+#### Test H5 — Stub-safe mode (VPS disabled)
+
+Set `CHANGE_TRACKER_ENABLED = false` in Script Properties.
+
+Repeat batch POST.
+
+**Verify**:
+1. `tracking.statusCode: 0`
+2. `tracking.vpsStatus: "skipped"`
+3. `tracking.vpsAck: false`
+4. Stub server shows NO new output
+5. `_CHANGE_LOG` row has `vpsStatus: skipped`
+
+Re-enable: set `CHANGE_TRACKER_ENABLED = true` after test.
+
+#### Test H6 — Backward compatibility (plan1 reportChange)
+
+```bash
+curl -sL -d '{"action":"reportChange","author":"compat-test","files":["test.gs"],"changelog":"Backward compat","commitHash":"abc123"}' \
+  -H "Content-Type: application/json" "$GAS_WEBAPP_URL" | jq .
+```
+
+**Verify**:
+1. `tracking.statusCode: 0`
+2. Response contains `success: true`
+3. Plan1 single-change endpoint unaffected by plan2 batch changes
+
+#### Test H7 — Payload builder commit ordering
+
+```bash
+FROM=$(git log --reverse --pretty=format:"%H" | head -1)
+TO=$(git rev-parse HEAD)
+bash scripts/build-batch-payload.sh "$FROM" "$TO" "apps-script/src/" "manual" "order-test" "owner/cash_synch_proto" | jq '.commits | [first.message, last.message]'
+```
+
+**Verify**: First commit message is the oldest commit, last is the newest.
+
+#### Test H8 — Payload builder Zone.Identifier filtering
+
+```bash
+bash scripts/build-batch-payload.sh "$FROM" "$TO" "apps-script/src/" "manual" "filter-test" "owner/cash_synch_proto" | jq '.filesChanged | map(select(contains("Zone")))'
+```
+
+**Verify**: Empty array `[]` — no Zone.Identifier files in output.
+
+### Test Report Format
+
+Create `docs/test-report-plan2-v3.md`:
+
+```markdown
+# Test Report — Plan 2 Phase 5.5 (Handshake Verification)
+
+**Date**: YYYY-MM-DD
+**Tester**: test-agent
+**Phase**: 5.5 — Pre-Phase 6 handshake verification
+
+## Summary
+X/8 PASS | Y/8 FAIL
+
+## Results
+
+| Test | Name | Status | Notes |
+|------|------|--------|-------|
+| H1 | Happy path + status code | PASS/FAIL | ... |
+| H2 | VPS down (502) | PASS/FAIL | ... |
+| H3 | VPS non-JSON response | PASS/FAIL | ... |
+| H4 | VPS explicit ack:false | PASS/FAIL | ... |
+| H5 | Stub-safe mode | PASS/FAIL | ... |
+| H6 | Backward compatibility | PASS/FAIL | ... |
+| H7 | Commit ordering | PASS/FAIL | ... |
+| H8 | Zone.Identifier filter | PASS/FAIL | ... |
+
+## Artifacts
+- Deployment: @9 (v2.0.1)
+- Exec URL: ...
+- Stub port: 3456
+- ngrok URL: ...
+
+## Curl Commands Used
+(full commands for reproducibility)
+```
+
+### Phase 5.5 Completion Criteria
+
+- [x] `statusCode: 0|1` added to all response paths
+- [x] Success responses omit `error` field
+- [x] Success responses omit `vpsResponse` field
+- [x] `commits` array ordered oldest-first
+- [x] `filesChanged` excludes `:Zone.Identifier` files
+- [ ] `GAS_DEPLOYMENT_URL` updated in GAS Script Properties (human gate)
+- [ ] `clasp push -f` + `clasp deploy -i` to deploy fixes (human gate)
+- [ ] All 8 handshake tests PASS (H1-H8)
+- [ ] `docs/test-report-plan2-v3.md` generated
+- [ ] `docs/test-report-plan2.md` deleted
+- [ ] Committed to git
+
+---
+
 ## Phase 6 — Enterprise Integration (Local)
 
 **Goal**: Migrate the sandbox pipeline into `enterprise-operations-platform` while still using the local ngrok + stub server. This proves the pipeline works in the enterprise context before any VPS is provisioned.
@@ -1212,11 +1418,12 @@ git commit -m "feat: Phase 6 — documentation pipeline (local, via ngrok stub)"
 | Phase | Description | Status | Completed |
 |-------|-------------|--------|-----------|
 | 0 | Sandbox hardening (plan 1 extensions) | ✅ COMPLETE | 2026-02-16 |
-| 1 | GAS batch endpoint (reportBatch + notifyBatch) | ⬜ NOT STARTED | — |
-| 2 | GitHub Actions workflow (doc-batch.yml) | ⬜ NOT STARTED | — |
-| 3 | Local stub evolution (ack + batch storage) | ⬜ NOT STARTED | — |
-| 4 | End-to-end integration testing (local) | ⬜ NOT STARTED | — |
-| 5 | Finalization + tag (sandbox v2.0.0) | ⬜ NOT STARTED | — |
+| 1 | GAS batch endpoint (reportBatch + notifyBatch) | ✅ COMPLETE | 2026-03-01 |
+| 2 | GitHub Actions workflow (doc-batch.yml) | ✅ COMPLETE | 2026-03-01 |
+| 3 | Local stub evolution (ack + batch storage) | ✅ COMPLETE | 2026-03-01 |
+| 4 | End-to-end integration testing (6/6 PASS) | ✅ COMPLETE | 2026-03-01 |
+| 5 | Finalization + tag v2.0.0 | ✅ COMPLETE | 2026-03-01 |
+| 5.5 | Pre-Phase 6 cleanup + handshake verification (8 tests) | 🔄 IN PROGRESS | — |
 | 6 | Enterprise integration (local) | ⬜ NOT STARTED | — |
 
 ### PART B — VPS Migration (Future)

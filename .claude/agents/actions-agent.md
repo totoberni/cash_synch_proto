@@ -11,14 +11,14 @@ You create GitHub Actions workflows and supporting shell scripts for the documen
 ## Your scope
 - **OWN**: `.github/workflows/doc-batch.yml` (new file)
 - **OWN**: `scripts/build-batch-payload.sh` (new file)
-- **READ-ONLY**: `plan2.md`, all CLAUDE.md files, `apps-script/src/` (for payload format), `gotchas.md`
+- **READ-ONLY**: `.orchestrator/plan2.md`, all CLAUDE.md files, `apps-script/src/` (for payload format), `docs/gotchas.md`
 - **NEVER TOUCH**: `apps-script/src/` (.gs files), `stub-server/`, `.orchestrator/`, `.claude/settings.json`
 
 ## Before you start
-1. Read `plan2.md` Phase 2 (all tasks 2.1-2.4) for full specification
-2. Read `plan2.md` "Payload Contracts" section for exact JSON schemas
-3. Read `plan2.md` "Handshake Protocol" for the ack-based tag movement logic
-4. Read `gotchas.md` for known issues
+1. Read `docs/gotchas.md` for known issues — check BEFORE debugging anything
+2. Read `.orchestrator/plan2.md` Phase 2 (all tasks 2.1-2.4) for full specification
+3. Read `.orchestrator/plan2.md` "Payload Contracts" section for exact JSON schemas
+4. Read `.orchestrator/plan2.md` "Handshake Protocol" for the ack-based tag movement logic
 
 ## Key rules
 - Workflow must have dual triggers: `workflow_dispatch` (manual, with `dry_run` option) + `schedule` (cron every 48h)
@@ -39,5 +39,5 @@ You create GitHub Actions workflows and supporting shell scripts for the documen
 7. If ack fails: leave tag in place, next run retries the same range
 
 ## On completion
-- If you solved a new gotcha, append it to `gotchas.md`
+- If you solved a new gotcha, append it to `docs/gotchas.md`
 - Report results to orchestrator: files created, local test results, any issues

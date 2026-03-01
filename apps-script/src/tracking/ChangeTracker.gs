@@ -15,14 +15,13 @@ var ChangeTracker = {
    * Notify the system of a code change
    * @param {Object} changeData - Change details { author, files, changelog, commitHash }
    * @param {string} correlationId - Request correlation ID
-   * @returns {Object} Result object with changeLogRow, vpsStatus, and optional error
+   * @returns {Object} Result: { statusCode: 0|1, changeLogRow, vpsStatus, error? }
    */
   notify: function(changeData, correlationId) {
     var result = {
+      statusCode: 0,
       changeLogRow: null,
-      vpsStatus: 'skipped',
-      vpsResponse: null,
-      error: null
+      vpsStatus: 'skipped'
     };
 
     try {
@@ -62,7 +61,6 @@ var ChangeTracker = {
         sheet.getRange(rowNumber, 9).setValue(vpsResult.body); // Column I: vpsResponse
 
         result.vpsStatus = vpsResult.status;
-        result.vpsResponse = vpsResult.body;
 
         // 5. Log to LogService
         LogService.info('changetracker.notify', 'Change notification processed', {
@@ -83,6 +81,7 @@ var ChangeTracker = {
         });
       }
     } catch (err) {
+      result.statusCode = 1;
       result.error = err.message;
       LogService.error('changetracker.notify', 'Change notification failed: ' + err.message, {
         error: err.message,
@@ -220,16 +219,15 @@ var ChangeTracker = {
    * Notify the system of a batch of code changes (from GitHub Actions)
    * @param {Object} batchData - Batch details { trigger, triggeredBy, repository, range, commits, filesChanged, pathFilter }
    * @param {string} correlationId - Request correlation ID
-   * @returns {Object} Result object with changeLogRow, vpsStatus, vpsAck, vpsBatchId, vpsResponse, error
+   * @returns {Object} Result: { statusCode: 0|1, changeLogRow, vpsStatus, vpsAck, vpsBatchId, error? }
    */
   notifyBatch: function(batchData, correlationId) {
     var result = {
+      statusCode: 0,
       changeLogRow: null,
       vpsStatus: 'skipped',
       vpsAck: false,
-      vpsBatchId: null,
-      vpsResponse: null,
-      error: null
+      vpsBatchId: null
     };
 
     try {
@@ -282,7 +280,6 @@ var ChangeTracker = {
         result.vpsStatus = vpsResult.status;
         result.vpsAck = ackParsed;
         result.vpsBatchId = batchId;
-        result.vpsResponse = vpsResult.body;
 
         LogService.info('changetracker.notifyBatch', 'Batch notification processed', {
           trigger: batchData.trigger,
@@ -299,6 +296,7 @@ var ChangeTracker = {
         });
       }
     } catch (err) {
+      result.statusCode = 1;
       result.error = err.message;
       LogService.error('changetracker.notifyBatch', 'Batch notification failed: ' + err.message, {
         error: err.message,

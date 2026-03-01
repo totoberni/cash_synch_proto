@@ -75,7 +75,8 @@ curl -s "$GAS_DEV_URL?action=health" | jq .
 - Do not create, switch, or merge git branches autonomously
 
 ## Plan (source of truth for all implementation work)
-@plan.md
+@.orchestrator/plan.md
+@.orchestrator/plan2.md
 
 ## Orchestrator State
 @.orchestrator/state.md
@@ -85,4 +86,4 @@ curl -s "$GAS_DEV_URL?action=health" | jq .
 @apps-script/src/tracking/changelog.md
 
 ## Mistakes and Gotchas
-@gotchas.md
+@docs/gotchas.md

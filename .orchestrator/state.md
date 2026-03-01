@@ -1,8 +1,8 @@
 # Orchestrator State — GAS Change Tracker Sandbox
 
-> **Updated**: 2026-03-01T21:00Z
+> **Updated**: 2026-03-01T22:00Z
 > **Active Plan**: plan2.md (Automated Documentation Pipeline)
-> **Session**: Phases 1, 2, 3 COMPLETE. Ready for Phase 4 (e2e integration testing).
+> **Session**: Phases 1-5 COMPLETE. Phase 5.5 cleanup applied. Ready for Phase 6 (enterprise integration).
 
 ---
 
@@ -12,7 +12,7 @@ All phases complete. Tagged v1.0.0. See commit history below.
 ## Plan 2 Status (plan2.md)
 
 ### Current Phase
-Phase: 5 (Phases 1-5 COMPLETE)
+Phase: 5.5 (Phases 1-5.5 COMPLETE, code fixes applied, pending clasp push + manual Script Property update)
 Next: Phase 6 (enterprise integration)
 
 ### Phase Tracker
@@ -23,7 +23,8 @@ Next: Phase 6 (enterprise integration)
 | 2 | GitHub Actions workflow (doc-batch.yml) | ✅ COMPLETE | — | fa51543 |
 | 3 | VPS stub evolution (ack + batch storage) | ✅ COMPLETE | — | 02d9dba |
 | 4 | End-to-end integration testing (6/6 PASS) | ✅ COMPLETE | — | 46ff217 |
-| 5 | Finalization + tag v2.0.0 | ✅ COMPLETE | — | (pending) |
+| 5 | Finalization + tag v2.0.0 | ✅ COMPLETE | — | 5541743 |
+| 5.5 | Pre-Phase 6 cleanup + handshake verification | 🔄 IN PROGRESS | Human: update GAS_DEPLOYMENT_URL + clasp push + deploy | (pending) |
 
 ### Phase 0 Deliverables
 - `.env.example` — config template (committed)
@@ -38,6 +39,7 @@ Next: Phase 6 (enterprise integration)
 - ~~**Phase 2, Task 2.3**: Add `GAS_WEBAPP_URL` as GitHub Actions secret~~ ✅ PRE-COMPLETED
 - ~~**Phase 4**: Run `dev-start.sh`, set Script Properties, `clasp push -f`~~ ✅ PRE-COMPLETED
 - **Phase 5, Task 5.3**: Update GitHub secret if deployment URL changes
+- **Phase 5.5**: Update `GAS_DEPLOYMENT_URL` Script Property to @9 exec URL + `clasp push -f`
 - **Phase 6, Task 6.5**: Set enterprise GAS Script Properties
 
 ---
@@ -86,6 +88,9 @@ Do NOT use `-X POST` — it breaks on GAS 302 redirect. See gotchas.md.
 - (plan2) plan2.md Phase 0 section trimmed after completion (full spec preserved in git history)
 - (plan2) README.md updated with detailed e2e testing workflow and URL update matrix
 - (plan2) DEC-004: Stable deployment URL via `clasp deploy -i` + auto push+deploy in post-push-notify.sh
+- (plan2) DEC-005: API responses use `statusCode: 0|1` instead of `error: null`; `vpsResponse` removed from caller response
+- (plan2) DEC-006: Commits array oldest-first per payload contract; Zone.Identifier artifacts filtered
+- (plan2) DEC-007: Frozen deployment gotcha — must use `clasp deploy -i <id>` after `clasp push` to update /exec URL
 
 ## Gotchas Encountered
 See gotchas.md for full list.

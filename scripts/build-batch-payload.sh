@@ -80,7 +80,7 @@ COMMIT_COUNT=$(git rev-list --count "$FROM_SHA".."$TO_SHA")
 # Build commits array using NUL-delimited format for safe handling
 # of special characters in commit messages
 COMMITS_JSON=$(
-    git log "$FROM_SHA".."$TO_SHA" --pretty=format:"%H%x00%h%x00%an%x00%s%x00%aI%x00" |
+    git log --reverse "$FROM_SHA".."$TO_SHA" --pretty=format:"%H%x00%h%x00%an%x00%s%x00%aI%x00" |
     jq -R -s '
         split("\u0000\n") |
         map(select(length > 0)) |
@@ -101,6 +101,7 @@ COMMITS_JSON=$(
 # Build files changed array, filtering by PATH_FILTER and stripping prefix
 FILES_JSON=$(
     git diff --name-only "$FROM_SHA" "$TO_SHA" -- "$PATH_FILTER" 2>/dev/null |
+    grep -v ':Zone.Identifier' |
     sed "s|^${PATH_FILTER}||" |
     jq -R -s 'split("\n") | map(select(length > 0))'
 )
