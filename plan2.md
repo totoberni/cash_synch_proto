@@ -1509,83 +1509,248 @@ If VPS fails, rollback is instant:
 - [ ] Rollback procedure documented and tested
 - [ ] ngrok no longer required for pipeline operation
 
-### Enterprise Configuration Requirements
+---
 
-#### 1. GAS Script Properties (SISTEMA_DIPENDENTI_V9.2 project)
+## Phase V3 — n8n Orchestration
 
-| Property | Value | Notes |
-|----------|-------|-------|
-| `CHANGE_TRACKER_VPS_URL` | `https://<vps-domain>/changelog` | VPS endpoint (replace ngrok) |
-| `CHANGE_TRACKER_ENABLED` | `true` | Master switch |
-| `GAS_DEPLOYMENT_URL` | The enterprise exec URL | Self-reference in payload |
+**Goal**: Configure n8n workflows to process incoming batches: receive webhook, fetch GitHub diffs, dispatch to AI agents, collect results.
 
-#### 2. GitHub Secrets (enterprise-operations-platform repo)
+**Prerequisite**: Phase V2 complete (VPS receiving batches).
 
-| Secret | Value | Purpose |
-|--------|-------|---------|
-| `GAS_WEBAPP_URL` | Enterprise GAS exec URL | Used by doc-batch workflow |
+### Task V3.1 — Create Batch Processing Workflow
 
-#### 3. GitHub Actions Workflow Adaptation
+In n8n UI (`https://<domain>/n8n`), create workflow:
 
-The `doc-batch.yml` needs these enterprise-specific changes:
-
-```yaml
-env:
-  # Enterprise paths to monitor (not just apps-script/src/)
-  PATH_FILTER: 'src/lib/sync/'  # or broader: 'src/' for all changes
-  # Could also be multi-path: monitor GAS + sync + API changes
+```
+Webhook (POST /webhook/doc-batch)
+  → Extract batch metadata (commits, files, date range)
+  → For each commit:
+      → GitHub API: GET /repos/{owner}/{repo}/compare/{base}...{head}
+      → Extract diff content
+  → Aggregate diffs into documentation context
+  → Trigger AI agent subworkflow
+  → Store results in PostgreSQL
+  → Update static HTML
 ```
 
-**Dual trigger**:
-- `workflow_dispatch` (manual, with dry_run option)
-- `schedule: cron '0 9 */2 * *'` (every 48h)
+### Task V3.2 — Configure GitHub API Access
 
-#### 4. Static HTML Documentation Target
+| Setting | Value |
+|---------|-------|
+| GitHub PAT scope | `repo:read` (private repos) or `public_repo` |
+| Store in | n8n credentials manager |
+| Rate limit | 5,000 req/hr (authenticated) |
 
-The documentation output will be a **static HTML file** (stub for now, to be replaced by CEO's actual file). Requirements:
+### Task V3.3 — Scale Workers
+
+```bash
+# Scale n8n workers based on load (see VPSs.md for tier guidance)
+docker compose up -d --scale n8n-worker=3   # 3 workers for 10-15 agents
+docker compose up -d --scale n8n-worker=5   # 5 workers for 20+ agents
+```
+
+### Phase V3 Completion Criteria
+
+- [ ] n8n webhook receives batches from webhook-listener
+- [ ] GitHub API integration fetches diffs successfully
+- [ ] Worker scaling tested (1 → 3 workers)
+- [ ] Batch processing completes within 2 minutes for typical payload
+
+---
+
+## Phase V4 — AI Documentation Agents
+
+**Goal**: Deploy AI-powered agents that transform code diffs into human-readable documentation.
+
+**Prerequisite**: Phase V3 complete (n8n fetching diffs).
+
+### Task V4.1 — Agent Architecture
+
+```
+n8n workflow
+  │
+  ├── Code Analysis Agent (Claude API)
+  │   Input: raw diff + file context
+  │   Output: structured change summary (what changed, why it matters)
+  │
+  ├── Documentation Writer Agent (Claude API)
+  │   Input: change summaries + existing docs
+  │   Output: updated documentation sections
+  │
+  └── HTML Renderer
+      Input: documentation markdown
+      Output: styled HTML page
+```
+
+### Task V4.2 — Configure AI API Access
+
+| Provider | Model | Use Case | Est. Cost/Batch |
+|----------|-------|----------|-----------------|
+| Anthropic | claude-sonnet-4-6 | Code analysis + doc writing | ~$0.10-0.50 |
+| Anthropic | claude-haiku-4-5 | Summarization + formatting | ~$0.01-0.05 |
+
+Store API keys in n8n credentials manager (encrypted at rest).
+
+### Task V4.3 — Create n8n AI Subworkflows
+
+1. **Code Analysis**: Receives diff → calls Claude → returns structured summary
+2. **Doc Generation**: Receives summaries → calls Claude → returns markdown
+3. **HTML Build**: Converts markdown → HTML with template
+
+### Task V4.4 — Test with Real Batches
+
+Replay stored batches from PostgreSQL through the AI pipeline. Verify:
+- Documentation accurately reflects code changes
+- No hallucinated content
+- HTML renders correctly
+- Total processing time < 5 minutes per batch
+
+### Phase V4 Completion Criteria
+
+- [ ] AI agents process diffs and generate documentation
+- [ ] Documentation quality verified against manual review
+- [ ] Cost per batch within budget (< $1.00 for typical batch)
+- [ ] Processing pipeline handles errors gracefully (retry, fallback)
+
+---
+
+## Phase V5 — Documentation Delivery
+
+**Goal**: Make generated documentation accessible to the CEO and team.
+
+**Prerequisite**: Phase V4 complete (AI agents generating HTML docs).
+
+### Task V5.1 — Static HTML Output
 
 | Aspect | Detail |
 |--------|--------|
-| Location | Local machine (CEO's) until VPS deployment |
 | Format | Single-page HTML with embedded CSS |
-| Content | Auto-generated documentation of SISTEMA_DIPENDENTI code changes |
-| Update mechanism | VPS generates HTML → served via static file server or pushed to repo |
-| Initial stub | Create `docs/sistema-dipendenti-docs.html` as placeholder |
+| Content | Auto-generated documentation of code changes per batch |
+| Location | VPS: `/srv/docs/` (served by Caddy) |
+| URL | `https://<domain>/docs/changelog.html` |
+| Update | Overwritten on each batch processing completion |
 
-### VPS Architecture (Post-Migration)
+### Task V5.2 — Delivery Options
 
+| Option | Mechanism | Pros | Cons |
+|--------|-----------|------|------|
+| **A** | VPS serves HTML via HTTPS | Simplest, always current | Requires VPS uptime |
+| **B** | VPS pushes HTML to GitHub repo | Version-controlled | CEO needs GitHub access |
+| **C** | n8n pushes to Google Drive | Integrates with CEO's workflow | Extra API integration |
+| **D** | Email digest via n8n | Proactive delivery | Requires email config |
+
+**Recommended**: Option A (simplest, CEO bookmarks URL) + Option C (Google Drive for offline access).
+
+### Task V5.3 — Verify End-to-End
+
+Full pipeline test:
 ```
-GitHub (enterprise-operations-platform)
-    │
-    │  Push / PR / Cron (48h)
-    ▼
-GitHub Actions (doc-batch.yml)
-    │
-    │  POST /exec { action: "reportBatch", ... }
-    ▼
-GAS Web App (SISTEMA_DIPENDENTI_V9.2)
-    │
-    ├── Write batch to _CHANGE_LOG sheet
-    │
-    │  POST /changelog { batch payload }
-    ▼
-VPS (Hetzner CX33, recommended)
-    │
-    ├── Receive batch, store durably (PostgreSQL)
-    ├── Return { ack: true, batchId }
-    │
-    │  (Async processing)
-    ├── Fetch diff from GitHub API
-    │   GET /repos/owner/repo/compare/{from}...{to}
-    ├── Process diff through AI agents (Claude/GPT API)
-    ├── Generate HTML documentation
-    ├── Update static HTML file
-    └── Optionally push to repo or serve via HTTP
+Developer pushes code → GitHub Action triggers → GAS receives batch
+→ GAS writes _CHANGE_LOG + forwards to VPS → VPS stores in PostgreSQL
+→ n8n fetches GitHub diff → AI agents generate documentation
+→ HTML updated at https://<domain>/docs/changelog.html
+→ CEO views documentation in browser
 ```
 
-### Integration with Enterprise Sync Infrastructure
+### Phase V5 Completion Criteria
 
-The enterprise already has sophisticated sync infrastructure:
+- [ ] Documentation HTML accessible at VPS URL
+- [ ] Content accurately reflects recent code changes
+- [ ] Delivery mechanism chosen and configured
+- [ ] CEO can access documentation without technical steps
+- [ ] Full pipeline test passes end-to-end
+
+---
+
+## Migration Notes
+
+### What Changes When Moving from Local to VPS
+
+| Component | Local (Part A) | VPS (Part B) | Change Required |
+|-----------|---------------|--------------|-----------------|
+| GAS Script Properties URL | `https://<ngrok>.ngrok.io/changelog` | `https://<vps-domain>/changelog` | **URL swap only** |
+| GAS code | Unchanged | Unchanged | None |
+| GitHub Actions workflow | Unchanged | Unchanged | None |
+| Payload contracts | Unchanged | Unchanged | None |
+| `_CHANGE_LOG` sheet | Unchanged | Unchanged | None |
+
+### What Does NOT Change
+
+- GAS `doPost` routing and `handleReportBatch` logic
+- GitHub Actions `doc-batch.yml` trigger, schedule, and payload format
+- `build-batch-payload.sh` script
+- Correlation ID propagation
+- `_CHANGE_LOG` sheet structure and write logic
+- Enterprise `sync` action routing (completely independent)
+
+### Rollback Procedure (VPS → Local)
+
+If VPS fails at any point, rollback to local ngrok in < 5 minutes:
+
+1. `./scripts/dev-start.sh` (starts stub server + ngrok)
+2. Copy ngrok HTTPS URL
+3. Update GAS Script Properties: `CHANGE_TRACKER_VPS_URL` → ngrok URL
+4. Test: trigger a batch → verify `_CHANGE_LOG` shows `vpsStatus: 200`
+5. Pipeline is operational again via local stub
+
+### Data Migration
+
+```bash
+# Export batches from local stub to VPS PostgreSQL (if needed)
+# The stub server logs are console-only; _CHANGE_LOG sheet is the durable record
+# No data migration needed — _CHANGE_LOG sheet is the source of truth
+```
+
+---
+
+## Future Development Notes
+
+### Short-term (After Part A Complete)
+
+1. **Multi-spreadsheet monitoring**: Extend to SISTEMA_TASK_MANAGEMENT and Referral spreadsheets
+2. **Webhook-based triggers**: Replace cron with GitHub webhook for real-time documentation
+3. **Dry-run dashboard**: Build a simple HTML page showing pending vs. processed batches
+4. **Alert on failure**: n8n sends Slack/email notification if pipeline fails
+
+### Medium-term (After Part B Established)
+
+5. **Multi-engine documentation**: Separate doc pages per engine (HR, Operations, Referral, Finance)
+6. **Diff visualization**: Inline code diffs in the HTML documentation (syntax-highlighted)
+7. **Historical archive**: Keep previous doc versions, build a timeline view
+8. **gas-client.ts integration**: Replace `curl`-based GitHub Action with TypeScript client (reuse enterprise's `src/lib/sync/gas-client.ts`)
+9. **Raulph agent integration**: Add `doc-pipeline` agent to the enterprise's 17-agent Raulph ecosystem
+
+### Long-term (Scaling)
+
+10. **Multi-repo monitoring**: Extend pipeline to other company repositories
+11. **AI-powered code review**: Use the same pipeline for automated PR review comments
+12. **Knowledge base**: Aggregate documentation into a searchable knowledge base
+13. **Cost optimization**: Move from per-call API pricing to batched/cached processing
+
+### Scaling Cost Projections
+
+| Stage | Agents | VPS Tier | VPS Cost/mo | Est. API Cost/mo | Total/mo |
+|-------|--------|----------|-------------|------------------|----------|
+| MVP | 5 | CX33 (8 GB) | ~€5.49 | €20-50 | €25-55 |
+| Growth | 10-15 | CX43 (16 GB) | ~€9.49 | €50-150 | €60-160 |
+| Scale | 20-30 | CX53 (32 GB) | ~€17.49 | €150-400 | €170-420 |
+| Stability | 20+ | CCX23 (dedicated) | ~€24.49 | €150-400 | €175-425 |
+
+> **Note**: Hetzner prices increase ~30-37% after April 1, 2026. See VPSs.md for updated pricing.
+> API costs are the dominant expense (95%+). VPS hosting is <5% of total spend.
+
+---
+
+## Reference: Spreadsheet → GAS → Enterprise Mapping
+
+| Spreadsheet Name | Spreadsheet ID | GAS Project | Enterprise Engine | .env Key |
+|------------------|----------------|-------------|-------------------|----------|
+| Sistema_Contabile_Referral_v1 | `1ETubOs4yNB7IMGLvSTrwfXMqUz9zoQBoHJFhDEhoDkM` | (separate) | Referral | `REFERRAL_SPREADSHEET_ID` |
+| LINK | `10vPjEYitf_xvn8idWo_UMEEyp0VULU3jqnV9EcJg1bA` | (separate) | Referral Links | `LINK_SPREADSHEET_ID` |
+| SISTEMA_TASK_MANAGEMENT_V9.3 | `1dBNUsg4q--Mx65-VrpdYKQDKvPkcl8faL-Q-KrjGUA8` | (separate) | Operations | `TASKS_SPREADSHEET_ID` |
+| **SISTEMA_DIPENDENTI_V9.3** | `1DOCv_385d9RZcHHoc6uSen0JlpyxKVHSkaYQQNMcbiE` | **`1xF9D62dLZJ7df0aNmKm82UJ6BZPGiOAKdxKdvWp0Ra-NVmmP60GrCQH4`** | **HR (target)** | `HR_SPREADSHEET_ID` |
+
+## Reference: Enterprise Sync Infrastructure
 
 | Existing Component | Relevance to Doc Pipeline |
 |--------------------|--------------------------|
@@ -1597,87 +1762,3 @@ The enterprise already has sophisticated sync infrastructure:
 | `bus/PROJECT_SYNC_STATE.md` | Can track doc pipeline state alongside sync state |
 
 **Key insight**: The enterprise's `gas-client.ts` already handles GAS API calls with correlation ID propagation. The doc pipeline's GAS interaction can reuse this client rather than raw `curl` calls.
-
-### Migration Phases (Enterprise-Specific)
-
-#### Phase E1: GAS Endpoint Addition
-1. Add `ChangeTracker.gs` to enterprise GAS project
-2. Add `reportBatch` case to enterprise WebApp.gs
-3. `clasp push` to SISTEMA_DIPENDENTI_V9.2 project
-4. Test via `/dev` URL with stub payload
-5. Set Script Properties
-
-#### Phase E2: GitHub Actions Deployment
-1. Copy `doc-batch.yml` to enterprise `.github/workflows/`
-2. Adapt `PATH_FILTER` for enterprise paths (multiple options):
-   - `src/lib/sync/` — sync module changes only
-   - `apps-script/src/` — GAS code changes
-   - `src/` — all source changes (broad)
-   - `prisma/` — schema changes
-3. Add `GAS_WEBAPP_URL` secret to enterprise repo
-4. Test with `workflow_dispatch` dry run
-
-#### Phase E3: VPS Deployment (Replaces Stub)
-1. Provision Hetzner CX33 (see VPSs.md)
-2. Deploy Docker stack: n8n + PostgreSQL + Redis + webhook listener
-3. Configure VPS endpoint in GAS Script Properties
-4. Disable ngrok (no longer needed)
-5. Test full pipeline: GitHub Action → GAS → VPS → docs
-
-#### Phase E4: HTML Documentation Generation
-1. Create doc generation agent on VPS (calls Claude/GPT APIs)
-2. Agent receives batch, fetches GitHub diff, generates documentation
-3. Output: static HTML file with change documentation
-4. Serve HTML via VPS HTTP server or push to repo
-5. CEO accesses documentation via browser
-
-#### Phase E5: Static HTML Sync to CEO's Machine
-1. Implement sync mechanism (options):
-   - **A**: VPS pushes HTML to GitHub repo (CEO pulls)
-   - **B**: VPS serves HTML via HTTPS (CEO bookmarks URL)
-   - **C**: VPS syncs to CEO's machine via rsync/SCP (requires access)
-   - **D**: n8n workflow pushes to Google Drive (CEO's existing flow)
-2. **Recommended**: Option B (simplest) or D (integrates with existing workflow)
-
-### What We Need Now to Continue
-
-| # | Requirement | Status | Blocker |
-|---|-------------|--------|---------|
-| 1 | Complete sandbox plan2 Phases 1-3 (batch endpoint, GitHub Actions, VPS stub) | Pending | No blocker — agents ready |
-| 2 | Access to SISTEMA_DIPENDENTI_V9.2 GAS project (for clasp push) | **NEEDED** | Need clasp login + project access |
-| 3 | Enterprise repo GitHub Actions access (for adding secrets + workflow) | **NEEDED** | Need repo admin access |
-| 4 | Static HTML stub file for local development | Can create now | — |
-| 5 | GAS project `.clasp.json` for enterprise project | **NEEDED** | Script ID: `1xF9D62dLZJ7df0aNmKm82UJ6BZPGiOAKdxKdvWp0Ra-NVmmP60GrCQH4` |
-| 6 | VPS provisioning (Hetzner CX33) | Pending CEO approval | See VPSs.md |
-| 7 | Domain name for VPS (optional, can use IP) | Pending | Low priority |
-| 8 | AI API keys for doc generation (Claude, GPT) | **NEEDED** | For VPS agents |
-| 9 | Enterprise `.env` values (for testing sync) | **NEEDED** | Supabase, DB credentials |
-| 10 | GAS code from SISTEMA_DIPENDENTI_V9.2 project | **NEEDED** | clasp pull or manual copy |
-
-### Spreadsheet → GAS → Enterprise Mapping
-
-| Spreadsheet Name | Spreadsheet ID | GAS Project | Enterprise Engine | .env Key |
-|------------------|----------------|-------------|-------------------|----------|
-| Sistema_Contabile_Referral_v1 | `1ETubOs4yNB7IMGLvSTrwfXMqUz9zoQBoHJFhDEhoDkM` | (separate) | Referral | `REFERRAL_SPREADSHEET_ID` |
-| LINK | `10vPjEYitf_xvn8idWo_UMEEyp0VULU3jqnV9EcJg1bA` | (separate) | Referral Links | `LINK_SPREADSHEET_ID` |
-| SISTEMA_TASK_MANAGEMENT_V9.3 | `1dBNUsg4q--Mx65-VrpdYKQDKvPkcl8faL-Q-KrjGUA8` | (separate) | Operations | `TASKS_SPREADSHEET_ID` |
-| **SISTEMA_DIPENDENTI_V9.3** | `1DOCv_385d9RZcHHoc6uSen0JlpyxKVHSkaYQQNMcbiE` | **`1xF9D62dLZJ7df0aNmKm82UJ6BZPGiOAKdxKdvWp0Ra-NVmmP60GrCQH4`** | **HR (target)** | `HR_SPREADSHEET_ID` |
-
-### Plan Analysis: Are the Plans Correctly Setting Us Up?
-
-**plan.md (Plan 1)**: Correctly implemented the single-commit change tracking foundation. All 5 phases complete. The architecture (trigger → GAS → VPS relay) is sound and directly transplantable.
-
-**plan2.md (Plan 2)**: Correctly extends Plan 1 with batch processing via GitHub Actions. The handshake protocol (ack-based tag movement) is robust. However, the following gaps exist for enterprise migration:
-
-| Gap | Impact | Resolution |
-|-----|--------|------------|
-| No enterprise-specific PATH_FILTER configuration | GitHub Action monitors wrong paths | Added in Phase E2 above |
-| No HTML doc generation spec | VPS receives batches but has no doc output | Added Phase E4 above |
-| No static HTML delivery mechanism | CEO can't access docs | Added Phase E5 above |
-| Enterprise WebApp.gs has `sync` action (plan2 assumes our simplified version) | Merge conflict risk | Noted: must ADD case, not replace |
-| Enterprise has `gas-client.ts` (TypeScript) for GAS calls | Opportunity to reuse instead of raw curl | Integration point documented |
-| Enterprise has existing CI/CD (`ci.yml`) | New workflow must coexist | Use separate workflow file |
-| Enterprise uses Raulph orchestrator (17 agents) | Doc pipeline agent should integrate | Can add `doc-pipeline` agent definition |
-| No mention of SISTEMA_DIPENDENTI_V9.2 specifically | Plan was generic | Now mapped explicitly |
-
-**Overall assessment**: The plans are ~80% correct for migration. This addendum fills the remaining 20% with enterprise-specific technical details.
