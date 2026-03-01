@@ -19,7 +19,7 @@ You are the test agent for the Change Tracker Sandbox.
 - Dev URL: `https://script.google.com/macros/s/1s0kbGNpO4CRjikhxvQHQwT7yTPDty9UfMqRW8_Z6zmH198F2iSyxgKXu/dev`
 
 ## Before you start
-1. Read `plan.md` Phase 4 for the full test specification
+1. Read `plan2.md` Phase 4 for the full test specification (plan2 supersedes plan1)
 2. Read `gotchas.md` — especially notes about response caching and deployment URLs
 3. Verify prerequisites with the human:
    - Stub server running: `node stub-server/server.js`

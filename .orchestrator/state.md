@@ -1,8 +1,8 @@
 # Orchestrator State — GAS Change Tracker Sandbox
 
-> **Updated**: 2026-02-16T12:30Z
+> **Updated**: 2026-03-01T21:00Z
 > **Active Plan**: plan2.md (Automated Documentation Pipeline)
-> **Session**: Phase 0 complete + auto-deploy implemented. Awaiting user for next phases.
+> **Session**: Phases 1, 2, 3 COMPLETE. Ready for Phase 4 (e2e integration testing).
 
 ---
 
@@ -12,18 +12,18 @@ All phases complete. Tagged v1.0.0. See commit history below.
 ## Plan 2 Status (plan2.md)
 
 ### Current Phase
-Phase: 0 (COMPLETE)
-Next: Phases 1, 2, 3 (all independent — can launch in parallel)
+Phase: 5 (Phases 1-5 COMPLETE)
+Next: Phase 6 (enterprise integration)
 
 ### Phase Tracker
 | Phase | Description | Status | Blocker | Commit |
 |-------|-------------|--------|---------|--------|
 | 0 | Sandbox hardening | ✅ COMPLETE | — | 36b5e53 |
-| 1 | GAS batch endpoint (reportBatch + notifyBatch) | ⬜ NOT STARTED | — | — |
-| 2 | GitHub Actions workflow (doc-batch.yml) | ⬜ NOT STARTED | Human: add GAS_WEBAPP_URL secret | — |
-| 3 | VPS stub evolution (ack + batch storage) | ⬜ NOT STARTED | — | — |
-| 4 | End-to-end integration testing | ⬜ NOT STARTED | Blocked by 1+2+3 | — |
-| 5 | Finalization + tag | ⬜ NOT STARTED | Blocked by 4 | — |
+| 1 | GAS batch endpoint (reportBatch + notifyBatch) | ✅ COMPLETE | — | 40e77a1 |
+| 2 | GitHub Actions workflow (doc-batch.yml) | ✅ COMPLETE | — | fa51543 |
+| 3 | VPS stub evolution (ack + batch storage) | ✅ COMPLETE | — | 02d9dba |
+| 4 | End-to-end integration testing (6/6 PASS) | ✅ COMPLETE | — | 46ff217 |
+| 5 | Finalization + tag v2.0.0 | ✅ COMPLETE | — | (pending) |
 
 ### Phase 0 Deliverables
 - `.env.example` — config template (committed)
@@ -35,23 +35,24 @@ Next: Phases 1, 2, 3 (all independent — can launch in parallel)
 - Agent definitions: `gas-batch-agent.md` created, `tooling-agent.md` updated
 
 ### Human Gates Pending
-- **Phase 2, Task 2.3**: Add `GAS_WEBAPP_URL` as GitHub Actions secret
-- **Phase 4**: Run `dev-start.sh`, set Script Properties, `clasp push -f`
+- ~~**Phase 2, Task 2.3**: Add `GAS_WEBAPP_URL` as GitHub Actions secret~~ ✅ PRE-COMPLETED
+- ~~**Phase 4**: Run `dev-start.sh`, set Script Properties, `clasp push -f`~~ ✅ PRE-COMPLETED
 - **Phase 5, Task 5.3**: Update GitHub secret if deployment URL changes
+- **Phase 6, Task 6.5**: Set enterprise GAS Script Properties
 
 ---
 
 ## Active Workers
-None — awaiting user signal to launch Phases 1/2/3.
+None — Phase 4 ready to launch.
 
 ## Agent Roster (plan2)
 | Agent | Scope | Status |
 |-------|-------|--------|
-| gas-batch-agent | WebApp.gs, ChangeTracker.gs | Created (.claude/agents/gas-batch-agent.md) |
-| actions-agent | .github/workflows/, build-batch-payload.sh | Not yet created |
-| vps-stub-agent | stub-server/ | Not yet created |
+| gas-batch-agent | WebApp.gs, ChangeTracker.gs | ✅ Phase 1 complete |
+| actions-agent | .github/workflows/, build-batch-payload.sh | ✅ Phase 2 complete |
+| vps-stub-agent | stub-server/ | ✅ Phase 3 complete |
 | tooling-agent | scripts/, .env.example | Updated for plan2 |
-| test-agent | docs/ test reports | Unchanged from plan1 |
+| test-agent | docs/ test reports | Ready for Phase 4 |
 
 ---
 
@@ -66,9 +67,11 @@ None — awaiting user signal to launch Phases 1/2/3.
 | @4 | AKfycbw5S-VXJg6DB1QiYBDCOIOQEcD3neIltI_lMa8PLPNOBSiwo2-B4Tx6vmMNIPS38hPa | Phase 1 — base web app |
 | @6 | AKfycbxXQwYK9wfIGozgxM5MXl52Ne0SPeWcAfOaRg-Rxk8p-JIKzHk3-xFCk4BHVGhXH76J | Phase 2 — ChangeTracker |
 | @7 | AKfycbyt-ZCjQH5XA6IM_H90IOuLqXleUMC0sBTuv5Lc12-72EQX72J9osA-XWg3f5JRvHDn | v1.0.0 — final (plan1) |
+| @8 | AKfycbw8Oa1kckb7_QHYAuCZxQ5RmepwAxM9xN6_WoUQxnfCNC9zFzhzon7o2tejLnUMvIE | Phase 4 — anonymous test deployment |
+| @9 | AKfycbwkujDPilxb1TdmVOgS0n7rxFFX2UFdfcbtQb2betQGFX-69dt43Tln634P4srzktFF | v2.0.0 — Batch documentation pipeline |
 
 ### Active Exec URL
-`https://script.google.com/macros/s/AKfycbyt-ZCjQH5XA6IM_H90IOuLqXleUMC0sBTuv5Lc12-72EQX72J9osA-XWg3f5JRvHDn/exec`
+`https://script.google.com/macros/s/AKfycbwkujDPilxb1TdmVOgS0n7rxFFX2UFdfcbtQb2betQGFX-69dt43Tln634P4srzktFF/exec`
 
 ## Curl Pattern (IMPORTANT)
 For POST: `curl -sL -d '...' -H "Content-Type: application/json" URL`
@@ -98,3 +101,6 @@ See gotchas.md for full list.
 | 509b1a3 | New plan (plan2.md added) | 2 |
 | 36b5e53 | Phase 0: dev environment hardening + cleanup | 2 |
 | (pending) | Auto push+deploy in post-push-notify.sh (DEC-004) | 2 |
+| 40e77a1 | Phase 1: reportBatch endpoint + ChangeTracker.notifyBatch() | 2 |
+| fa51543 | Phase 2: GitHub Actions documentation batch workflow | 2 |
+| 02d9dba | Phase 3: VPS stub with batch ack + durable storage | 2 |

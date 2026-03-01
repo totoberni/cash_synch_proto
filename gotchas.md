@@ -19,7 +19,17 @@ This file stores common issues that have been solved to allow other agents not t
 | curl POST to GAS exec URL returns 405 | GAS returns 302 redirect; using `-X POST` forces POST on the redirect target which only accepts GET | Use `curl -sL -d '...' -H "Content-Type: application/json" URL` — the `-d` flag implies POST for the initial request, and curl properly follows the 302 as GET |
 | New deployment needed for access changes | Updating an existing deployment via `clasp deploy -i` may not apply access setting changes | Create a new deployment via IDE: Deploy > New deployment, set "Who has access" to "Anyone" |
 
-## Appendix B: Useful Clasp Commands
+## Appendix B: Dual-Clasp Architecture
+
+| Gotcha | Explanation | Workaround |
+|--------|-------------|------------|
+| Two separate clasp projects | Sandbox and enterprise each have their own `.clasp.json` pointing to different GAS projects. `clasp push` from sandbox only affects sandbox GAS; enterprise push only affects enterprise GAS. | Always `cd` into the correct `apps-script/` directory before `clasp push`. Verify with `clasp status`. |
+| Enterprise has no `.clasp.json` yet | Only `.clasp.json.example` exists with placeholder `YOUR_SCRIPT_ID_HERE` | Phase 6 Task 6.3: Copy `.clasp.json.example` to `.clasp.json` and set scriptId to `1xF9D62dLZJ7df0aNmKm82UJ6BZPGiOAKdxKdvWp0Ra-NVmmP60GrCQH4` |
+| Enterprise WebApp.gs has `sync` routing | Enterprise doPost switch has `sync` and `writeLog` cases. Sandbox version is stripped down. | Phase 6 must ADD `reportBatch` case alongside `sync`, not replace the switch. See enterprise WebApp.gs lines 88-107. |
+| Enterprise GAS re-authorization | Adding ChangeTracker.gs to enterprise introduces `UrlFetchApp` scope which may require re-authorization | After `clasp push` to enterprise, open IDE → select any function → Run → approve OAuth dialog |
+| GitHub Actions in enterprise | Enterprise already has `ci.yml`. New `doc-batch.yml` must coexist without conflicts | Use separate workflow file, separate triggers, no shared state |
+
+## Appendix C: Useful Clasp Commands
 
 | Command | Description |
 |---------|-------------|
