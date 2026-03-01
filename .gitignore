@@ -14,3 +14,6 @@ Thumbs.db
 
 # Claude Code local preferences
 CLAUDE.local.md
+
+# Stub server batch storage (runtime data)
+stub-server/batches/
