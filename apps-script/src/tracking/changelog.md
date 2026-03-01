@@ -2,6 +2,24 @@
 
 <!-- AUTO-MANAGED: Entries appended by PostToolUse hook -->
 
+## 2026-03-01 — Phase 1 (Plan 2): Batch Notification Support
+
+**Modified**: `ChangeTracker.gs`
+
+**Summary**: Added batch notification capability to ChangeTracker singleton for receiving multi-commit change batches from GitHub Actions.
+
+**Methods added**:
+- `notifyBatch(batchData, correlationId)` — Handles batch change notifications: writes batch summary to `_CHANGE_LOG` sheet, optionally forwards to VPS via `postToVps()`, parses VPS ack response (`ack: true` + `batchId`), updates sheet row with VPS result, logs via LogService
+- `buildBatchPayload(batchData, correlationId)` — Constructs JSON payload for VPS with scriptId, scriptEndpoint, timestamp, correlationId, and full batch details (trigger, triggeredBy, repository, range, commits, filesChanged, pathFilter)
+
+**Key features**:
+- Reuses existing `getOrCreateChangeLogSheet()`, `isVpsConfigured()`, `getVpsUrl()`, and `postToVps()` methods
+- Batch summary written to changelog column: "Batch: N commits (abc1234..def5678)"
+- VPS ack parsing: extracts `ack` boolean and `batchId` from JSON response
+- Stub-safe: gracefully skips VPS call if not configured (same pattern as `notify()`)
+- No `let`/`const` — all `var` (enterprise convention)
+- Existing `notify()`, `buildPayload()`, and `postToVps()` methods unchanged
+
 ## 2026-02-15 — Phase 2: ChangeTracker Service Implementation
 
 **Created**: `ChangeTracker.gs`

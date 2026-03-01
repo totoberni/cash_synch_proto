@@ -2,6 +2,29 @@
 
 <!-- AUTO-MANAGED: Entries appended by PostToolUse hook -->
 
+## 2026-03-01 — Phase 1 (Plan 2): reportBatch Endpoint
+
+**Modified**: `WebApp.gs`
+
+**Summary**: Added `reportBatch` action to doPost handler for receiving batch change notifications from GitHub Actions, delegating to `ChangeTracker.notifyBatch()`.
+
+**Changes**:
+1. Added `case 'reportBatch':` to doPost switch statement (after `reportChange`)
+2. Updated `availableActions` in default error response to include `'reportBatch'`
+3. Added `handleReportBatch(body, correlationId)` function after `handleReportChange`
+
+**handleReportBatch functionality**:
+- Validates required fields: `range` (object with `from` and `to` commit SHAs), `commits` (non-empty array), `repository` (string)
+- Returns validation error with correlationId if validation fails
+- Constructs batchData object with trigger, triggeredBy, repository, range, commits, filesChanged, pathFilter
+- Delegates to `ChangeTracker.notifyBatch()` for processing
+- Returns success status, correlationId, and full tracking result object
+
+**API contract**:
+- Request: `{ action: "reportBatch", repository: string, range: { from: string, to: string, commitCount: number }, commits: object[], trigger?: string, triggeredBy?: string, filesChanged?: string[], pathFilter?: string }`
+- Response (success): `{ success: true, correlationId: string, tracking: { changeLogRow, vpsStatus, vpsAck, vpsBatchId, vpsResponse, error? } }`
+- Response (validation error): `{ error: string, correlationId: string }`
+
 ## 2026-02-16 — Phase 0: Clean Up Test Artifacts
 
 **Modified**: `WebApp.gs`

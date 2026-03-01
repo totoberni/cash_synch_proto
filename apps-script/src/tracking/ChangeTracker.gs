@@ -214,5 +214,123 @@ var ChangeTracker = {
         body: 'Exception: ' + err.message
       };
     }
+  },
+
+  /**
+   * Notify the system of a batch of code changes (from GitHub Actions)
+   * @param {Object} batchData - Batch details { trigger, triggeredBy, repository, range, commits, filesChanged, pathFilter }
+   * @param {string} correlationId - Request correlation ID
+   * @returns {Object} Result object with changeLogRow, vpsStatus, vpsAck, vpsBatchId, vpsResponse, error
+   */
+  notifyBatch: function(batchData, correlationId) {
+    var result = {
+      changeLogRow: null,
+      vpsStatus: 'skipped',
+      vpsAck: false,
+      vpsBatchId: null,
+      vpsResponse: null,
+      error: null
+    };
+
+    try {
+      // 1. Write batch to _CHANGE_LOG
+      var sheet = this.getOrCreateChangeLogSheet();
+      var timestamp = new Date().toISOString();
+      var filesString = Array.isArray(batchData.filesChanged) ? batchData.filesChanged.join(', ') : '';
+      var batchSummary = 'Batch: ' + (batchData.range ? batchData.range.commitCount : 0)
+        + ' commits (' + (batchData.range ? batchData.range.from.substring(0, 7) : '?')
+        + '..' + (batchData.range ? batchData.range.to.substring(0, 7) : '?') + ')';
+
+      var rowData = [
+        timestamp,
+        correlationId,
+        batchData.triggeredBy || 'unknown',
+        filesString,
+        batchSummary,
+        batchData.range ? batchData.range.to : '',
+        '',
+        'pending',
+        ''
+      ];
+
+      var rowNumber = sheet.getLastRow() + 1;
+      sheet.appendRow(rowData);
+      result.changeLogRow = rowNumber;
+
+      // 2. Forward to VPS if configured
+      if (this.isVpsConfigured()) {
+        var vpsUrl = this.getVpsUrl();
+        var payload = this.buildBatchPayload(batchData, correlationId);
+        var vpsResult = this.postToVps(vpsUrl, payload);
+
+        // 3. Parse VPS ack from response
+        var ackParsed = false;
+        var batchId = null;
+        try {
+          var vpsBody = JSON.parse(vpsResult.body);
+          ackParsed = vpsBody.ack === true;
+          batchId = vpsBody.batchId || null;
+        } catch (parseErr) {
+          // VPS response wasn't valid JSON — ack is false
+        }
+
+        // 4. Update sheet row
+        sheet.getRange(rowNumber, 7).setValue(vpsUrl);
+        sheet.getRange(rowNumber, 8).setValue(vpsResult.status);
+        sheet.getRange(rowNumber, 9).setValue(vpsResult.body);
+
+        result.vpsStatus = vpsResult.status;
+        result.vpsAck = ackParsed;
+        result.vpsBatchId = batchId;
+        result.vpsResponse = vpsResult.body;
+
+        LogService.info('changetracker.notifyBatch', 'Batch notification processed', {
+          trigger: batchData.trigger,
+          commitCount: batchData.range ? batchData.range.commitCount : 0,
+          vpsStatus: vpsResult.status,
+          vpsAck: ackParsed
+        });
+      } else {
+        sheet.getRange(rowNumber, 8).setValue('skipped');
+        LogService.info('changetracker.notifyBatch', 'Batch notification processed (VPS skipped)', {
+          trigger: batchData.trigger,
+          commitCount: batchData.range ? batchData.range.commitCount : 0,
+          vpsStatus: 'skipped'
+        });
+      }
+    } catch (err) {
+      result.error = err.message;
+      LogService.error('changetracker.notifyBatch', 'Batch notification failed: ' + err.message, {
+        error: err.message,
+        stack: err.stack
+      });
+    }
+
+    return result;
+  },
+
+  /**
+   * Build the batch payload to send to VPS
+   * @param {Object} batchData - Batch details
+   * @param {string} correlationId - Request correlation ID
+   * @returns {Object} Payload object for VPS
+   */
+  buildBatchPayload: function(batchData, correlationId) {
+    var props = PropertiesService.getScriptProperties();
+    return {
+      scriptId: ScriptApp.getScriptId(),
+      scriptEndpoint: props.getProperty('GAS_DEPLOYMENT_URL') || 'not-configured',
+      timestamp: new Date().toISOString(),
+      correlationId: correlationId,
+      batch: {
+        trigger: batchData.trigger || 'unknown',
+        triggeredBy: batchData.triggeredBy || 'unknown',
+        repository: batchData.repository || 'unknown',
+        range: batchData.range || null,
+        commits: batchData.commits || [],
+        filesChanged: batchData.filesChanged || [],
+        pathFilter: batchData.pathFilter || ''
+      }
+    };
   }
 };

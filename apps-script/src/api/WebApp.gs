@@ -94,10 +94,14 @@ function doPost(e) {
         response = handleReportChange(body, correlationId);
         break;
 
+      case 'reportBatch':
+        response = handleReportBatch(body, correlationId);
+        break;
+
       default:
         response = {
           error: 'Unknown action: ' + action,
-          availableActions: ['writeLog', 'reportChange'],
+          availableActions: ['writeLog', 'reportChange', 'reportBatch'],
           correlationId: correlationId
         };
     }
@@ -187,6 +191,45 @@ function handleReportChange(body, correlationId) {
   };
 
   var result = ChangeTracker.notify(changeData, correlationId);
+
+  return {
+    success: !result.error,
+    correlationId: correlationId,
+    tracking: result
+  };
+}
+
+/**
+ * Handle reportBatch action — receives batch change metadata from GitHub Actions and forwards to VPS
+ * @param {Object} body - Request body with batch details
+ * @param {string} correlationId - Request correlation ID
+ * @returns {Object} Result with tracking info
+ */
+function handleReportBatch(body, correlationId) {
+  if (!body.range || typeof body.range !== 'object') {
+    return { error: 'Missing or invalid field: range (object required)', correlationId: correlationId };
+  }
+  if (!body.range.from || !body.range.to) {
+    return { error: 'Missing fields: range.from and range.to (commit SHAs required)', correlationId: correlationId };
+  }
+  if (!body.commits || !Array.isArray(body.commits) || body.commits.length === 0) {
+    return { error: 'Missing or invalid field: commits (non-empty array required)', correlationId: correlationId };
+  }
+  if (!body.repository || typeof body.repository !== 'string') {
+    return { error: 'Missing or invalid field: repository (string required, e.g. "owner/repo")', correlationId: correlationId };
+  }
+
+  var batchData = {
+    trigger: body.trigger || 'unknown',
+    triggeredBy: body.triggeredBy || 'unknown',
+    repository: body.repository,
+    range: body.range,
+    commits: body.commits,
+    filesChanged: body.filesChanged || [],
+    pathFilter: body.pathFilter || ''
+  };
+
+  var result = ChangeTracker.notifyBatch(batchData, correlationId);
 
   return {
     success: !result.error,
